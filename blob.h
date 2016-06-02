@@ -1,7 +1,13 @@
 #pragma once
 #include <vcc.h>
 #include <stdint.h>
- 
+//#include "mymem.h"
+//#include "mysafety.h"
+#include <string.h>
+
+//#define memcpy_check( d, s, n )     do { if ( (n) && (d) ); memcpy( (d), (s), (n)); } } while(0)
+
+
 typedef int BOOL;
 #define TRUE ((int) 1)
 #define FALSE ((int) 0)
@@ -16,6 +22,7 @@ _(dynamic_owns) struct s2n_blob {
        uint32_t size;
        // true iff the backing memory was provided by the user and is to be returned to him
        BOOL user_allocated;
+	   BOOL mlocked;
        // if user_allocated, the size and address of the backing memory (but not the data) is part of the abstract value
        uint32_t allocated;
        uint8_t *data;
@@ -27,6 +34,7 @@ _(dynamic_owns) struct s2n_blob {
        _(invariant size <= allocated)
        _(invariant allocated ==> \mine(blob_data(\this)))
        _(invariant user_allocated || !allocated || \malloc_root(blob_data(\this)))
+	   _(invariant mlocked == 0)
 }s2n_blob;
 _(def \object blob_data(struct s2n_blob *b) { return ((uint8_t[b->allocated]) b->data); })
 #define wrap_blob(b) ghost { \
@@ -46,9 +54,15 @@ extern int s2n_blob_init(struct s2n_blob *b, uint8_t *data, uint32_t size)
 ;
  
 extern int s2n_blob_zero(struct s2n_blob *b)
-       _(maintains \wrapped(b))
-       _(writes b)
-       _(ensures \unchanged(b->size) && \unchanged(b->allocated) && \unchanged(b->user_allocated) && \unchanged(b->data))
-       _(ensures \forall size_t i; i < b->size ==> b->val[i] == 0)
+	   _(requires \extent_mutable(b))
+       _(ensures \wrapped(b))
+       _(writes \full_extent(b))
+	   _(requires b->user_allocated)
+	   _(requires b->size <= b->allocated)
+       _(ensures \unchanged(b->size))
+	   _(ensures \unchanged(b->allocated))
+	   _(ensures b->user_allocated)
+	   _(ensures \unchanged(b->data))
+       //_(ensures \forall size_t i; i < b->size ==> b->val[i] == 0)
        _(ensures \result == 0)
 ;
