@@ -6,7 +6,7 @@
 #define SYSTEM_PAGE_SIZE() 394857
 #define _UI32_MAX UINT32_MAX
 
-uint32_t min(uint32_t a, uint32_t b) _(requires \true) _(ensures \result <= a && \result <= b) { if (a <= b) return a; else return b; } 
+_(pure) uint32_t min(uint32_t a, uint32_t b) _(requires \true) _(ensures \result <= a && \result <= b) { if (a <= b) return a; else return b; } 
 
 int s2n_alloc(struct s2n_blob *b, uint32_t size)
        _(writes \extent(b))
@@ -28,7 +28,7 @@ int s2n_realloc(struct s2n_blob *b, uint32_t size)
        ;
  
 int s2n_free(struct s2n_blob *b)
-       _(requires memory_initialized())
+       //_(requires memory_initialized())
        _(requires \wrapped(b))
        _(writes b)
        _(ensures \old(b->user_allocated && b->allocated) ==> \wrapped(\old(blob_data(b))))
