@@ -66,7 +66,8 @@ extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 	_(requires in->size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(ensures stuffer->blob.size == in->size)
 	//_(ensures \forall size_t i; i<in->size ==> stuffer->blob.val[i] == in->data[i])
-	_(ensures stuffer->wiped && !stuffer->alloced && !stuffer->growable && !stuffer->tainted && stuffer->read_cursor==stuffer->write_cursor==0)
+	_(ensures stuffer->wiped && !stuffer->alloced && !stuffer->growable && !stuffer->tainted )
+	_(ensures stuffer->read_cursor==stuffer->write_cursor==0)
 ;
 
 extern int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
@@ -103,7 +104,9 @@ extern int s2n_stuffer_resize(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(requires !stuffer->tainted)
 	_(requires size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(ensures !\result ==> (stuffer->blob.size == size))
-	_(ensures \unchanged(stuffer->read_cursor) && \unchanged(stuffer->write_cursor)) //really? what if it becomes smaller than the write cursor?
+	_(ensures !\result && size <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) <= stuffer->write_cursor ==> (\unchanged(stuffer->read_cursor) && stuffer->write_cursor == \old(stuffer->write_cursor)- size))
+	_(ensures !\result && size <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) > stuffer->write_cursor ==> (stuffer->read_cursor == stuffer->write_cursor == \old(stuffer->write_cursor)- size))
+	_(ensures !\result && size > \old(stuffer->write_cursor) ==> (stuffer->read_cursor == stuffer->write_cursor == 0))
 ;
 
 extern int s2n_stuffer_reread(struct s2n_stuffer *stuffer)
@@ -123,7 +126,7 @@ extern int s2n_stuffer_wipe(struct s2n_stuffer *stuffer)
 	_(maintains \wrapped(stuffer))
 	_(ensures stuffer->tainted==0)
 	//_(ensures \forall size_t i; i<stuffer->write_cursor ==> stuffer->blob.val[i]== 0)
-	_(ensures !\result ==> (\unchanged(stuffer->write_cursor) && \unchanged(stuffer->read_cursor))) 
+	_(ensures !\result ==> (stuffer->write_cursor == stuffer->read_cursor == 0)) 
 ;
 
 extern int s2n_stuffer_wipe_n(struct s2n_stuffer *stuffer, const uint32_t n)
@@ -131,7 +134,9 @@ extern int s2n_stuffer_wipe_n(struct s2n_stuffer *stuffer, const uint32_t n)
 	_(maintains \wrapped(stuffer))
 	//_(ensures \forall size_t i; i>= stuffer->write_cursor - min(n,stuffer->write_cursor) && i<stuffer->write_cursor
 	//	==> stuffer->blob.val[i] == 0)
-	_(ensures \unchanged(stuffer->write_cursor) && \unchanged(stuffer->read_cursor))
+	_(ensures !\result && n <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) <= stuffer->write_cursor ==> (\unchanged(stuffer->read_cursor) && stuffer->write_cursor == \old(stuffer->write_cursor)- n))
+	_(ensures !\result && n <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) > stuffer->write_cursor ==> (stuffer->read_cursor == stuffer->write_cursor == \old(stuffer->write_cursor)- n))
+	_(ensures !\result && n > \old(stuffer->write_cursor) ==> (stuffer->read_cursor == stuffer->write_cursor == 0))
 ;
 
 /* Basic read and write */
@@ -192,7 +197,7 @@ extern int s2n_stuffer_skip_read(struct s2n_stuffer *stuffer, uint32_t n)
 	_(maintains \wrapped(stuffer))
 	_(writes stuffer)
 	_(requires n <= s2n_stuffer_data_available( stuffer ))
-	_(ensures (!\result ==> stuffer->read_cursor == \old(stuffer->read_cursor)+n) && \unchanged(stuffer->write_cursor))
+	_(ensures !\result ==> (stuffer->read_cursor == \old(stuffer->read_cursor)+n && \unchanged(stuffer->write_cursor)))
 ;
 
 extern int s2n_stuffer_skip_write(struct s2n_stuffer *stuffer, const uint32_t n)
@@ -201,7 +206,7 @@ extern int s2n_stuffer_skip_write(struct s2n_stuffer *stuffer, const uint32_t n)
 	_(requires n <= s2n_stuffer_space_remaining( stuffer ) || stuffer->growable)
 	_(ensures !\result && stuffer->growable && n <= s2n_stuffer_space_remaining( stuffer ) && n<1024 ==> stuffer->blob.size == \old(stuffer->blob.size) + 1024)
 	_(ensures !\result && stuffer->growable && n <= s2n_stuffer_space_remaining( stuffer ) && n>=1024 ==> stuffer->blob.size == \old(stuffer->blob.size) + n) 
-	_(ensures (!\result ==> stuffer->write_cursor == \old(stuffer->write_cursor)+n) && \unchanged(stuffer->read_cursor))
+	_(ensures !\result ==> (stuffer->write_cursor == \old(stuffer->write_cursor)+n && \unchanged(stuffer->read_cursor)))
 ;
 
 /* Raw read/write move the cursor along and give you a pointer you can
@@ -212,7 +217,7 @@ extern void *s2n_stuffer_raw_write(struct s2n_stuffer *stuffer, const uint32_t d
 	_(maintains \wrapped(stuffer))
 	_(requires data_len<=s2n_stuffer_space_remaining(stuffer))
 	_(ensures !\result ==> stuffer->tainted)
-	_(ensures !\result ==> (stuffer->write_cursor==\old(stuffer->write_cursor)+data_len && \unchanged(stuffer->read_cursor)))
+	_(ensures !\result ==> (stuffer->write_cursor==\old(stuffer->write_cursor) + data_len && stuffer->read_cursor == \old(stuffer->read_cursor)))
 ;
 
 extern void *s2n_stuffer_raw_read(struct s2n_stuffer *stuffer, uint32_t data_len)
@@ -220,7 +225,7 @@ extern void *s2n_stuffer_raw_read(struct s2n_stuffer *stuffer, uint32_t data_len
 	_(requires data_len <= s2n_stuffer_data_available( stuffer ))
 	_(maintains \wrapped(stuffer))
 	_(ensures !\result ==> stuffer->tainted)
-	_(ensures !\result ==> (stuffer->read_cursor==data_len && stuffer->write_cursor == \old(stuffer->write_cursor)-\old(stuffer->read_cursor)))
+	_(ensures !\result ==> (stuffer->read_cursor==\old(stuffer->read_cursor) + data_len && stuffer->write_cursor == \old(stuffer->write_cursor)))
 ;
 
 /* Send/receive stuffer to/from a file descriptor */
