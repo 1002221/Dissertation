@@ -216,16 +216,16 @@ extern void *s2n_stuffer_raw_write(struct s2n_stuffer *stuffer, const uint32_t d
 	_(writes \extent(stuffer))
 	_(maintains \wrapped(stuffer))
 	_(requires data_len<=s2n_stuffer_space_remaining(stuffer))
-	_(ensures !\result ==> stuffer->tainted)
-	_(ensures !\result ==> (stuffer->write_cursor==\old(stuffer->write_cursor) + data_len && stuffer->read_cursor == \old(stuffer->read_cursor)))
+	_(ensures stuffer->tainted)
+	_(ensures stuffer->write_cursor==\old(stuffer->write_cursor) + data_len && stuffer->read_cursor == \old(stuffer->read_cursor))
 ;
 
 extern void *s2n_stuffer_raw_read(struct s2n_stuffer *stuffer, uint32_t data_len)
 	_(writes stuffer)
 	_(requires data_len <= s2n_stuffer_data_available( stuffer ))
 	_(maintains \wrapped(stuffer))
-	_(ensures !\result ==> stuffer->tainted)
-	_(ensures !\result ==> (stuffer->read_cursor==\old(stuffer->read_cursor) + data_len && stuffer->write_cursor == \old(stuffer->write_cursor)))
+	_(ensures stuffer->tainted)
+	_(ensures stuffer->read_cursor==\old(stuffer->read_cursor) + data_len && stuffer->write_cursor == \old(stuffer->write_cursor))
 ;
 
 /* Send/receive stuffer to/from a file descriptor */
