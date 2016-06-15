@@ -1,12 +1,7 @@
 #pragma once
 #include <vcc.h>
 #include <stdint.h>
-//#include "mymem.h"
-//#include "mysafety.h"
 #include <string.h>
-
-//#define memcpy_check( d, s, n )     do { if ( (n) && (d) ); memcpy( (d), (s), (n)); } } while(0)
-
 
 typedef int BOOL;
 #define TRUE ((int) 1)
@@ -36,12 +31,15 @@ _(dynamic_owns) struct s2n_blob {
        _(invariant user_allocated || !allocated || \malloc_root(blob_data(\this)))
 	   _(invariant mlocked == 0)
 }s2n_blob;
+
 _(def \object blob_data(struct s2n_blob *b) { return ((uint8_t[b->allocated]) b->data); })
-#define wrap_blob(b) ghost { \
-       b->val = \lambda size_t i; b->data[i];\
+
+#define wrap_blob(b) _(ghost { \
+       b->val = \lambda size_t i; b->data[i]; \
        b->\owns = b->allocated ? {blob_data(b)} : {}; \
-       _(wrap b) \
-}
+	   _(assert \inv(b)) \
+	   _(wrap b) \
+})
        
 extern int s2n_blob_init(struct s2n_blob *b, uint8_t *data, uint32_t size)
        _(requires size ==> \extent_mutable(b))
@@ -54,15 +52,15 @@ extern int s2n_blob_init(struct s2n_blob *b, uint8_t *data, uint32_t size)
 ;
  
 extern int s2n_blob_zero(struct s2n_blob *b)
-	   _(requires \extent_mutable(b))
-       _(ensures \wrapped(b))
-       _(writes \full_extent(b))
+	   _(maintains \wrapped(b))
+       _(writes b)
 	   _(requires b->user_allocated)
 	   _(requires b->size <= b->allocated)
        _(ensures \unchanged(b->size))
 	   _(ensures \unchanged(b->allocated))
-	   _(ensures b->user_allocated)
+	   _(ensures \unchanged(b->user_allocated))
 	   _(ensures \unchanged(b->data))
        //_(ensures \forall size_t i; i < b->size ==> b->val[i] == 0)
        _(ensures \result == 0)
 ;
+
