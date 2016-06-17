@@ -42,5 +42,6 @@ int s2n_free(struct s2n_blob *b)
 	_(requires \wrapped(b))
 	_(writes b)
 	_(ensures \old(b->user_allocated && b->allocated) ==> \wrapped(\old(blob_data(b))))
-	_(ensures \old(b->user_allocated) ==> \forall size_t i; i < \old(b->size) ==> \old(b->data)[i] == \old(b->val[i]))
+	//_(ensures \old(b->user_allocated) ==> \forall size_t i; i < \old(b->size) ==> \old(b->data)[i] == \old(b->val[i]))
+	_(ensures !\result ==> b->data == NULL && b->size == 0 && b->allocated == 0)
 ;
