@@ -28,8 +28,9 @@ _(dynamic_owns) struct s2n_blob {
 	// other data invariants
 	_(invariant size <= allocated)
 	_(invariant allocated ==> \mine(blob_data(\this)))
-	_(invariant user_allocated || !allocated || \malloc_root(blob_data(\this)))
-	_(invariant mlocked == 0)
+	_(invariant user_allocated || !allocated || \malloc_root(blob_data(\this))) //if it's not the root object, then the only way it could have been allocated is if it was user-allocated.
+	//_(invariant mlocked == 0)
+	_(invariant size==0 ==> !user_allocated)
 }s2n_blob;
 
 _(def \object blob_data(struct s2n_blob *b) { return ((uint8_t[b->allocated]) b->data); })
@@ -42,9 +43,10 @@ _(def \object blob_data(struct s2n_blob *b) { return ((uint8_t[b->allocated]) b-
 })
        
 extern int s2n_blob_init(struct s2n_blob *b, uint8_t *data, uint32_t size)
-	_(requires size ==> \extent_mutable(b))
-	_(requires size==> \wrapped((uint8_t[size]) data))
-	_(writes size ? {(uint8_t[size]) data} : {})
+	_(requires \extent_mutable(b))
+	_(requires \wrapped((uint8_t[size]) data))
+	_(writes (uint8_t[size]) data)
+	_(requires size>0)
 	_(writes \full_extent(b))
 	_(ensures \wrapped(b) && b->size == size && b->allocated == size && b->user_allocated && b->data == data
 		&& \forall size_t i; i < size ==> b->val[i] == \old(data[i]))
