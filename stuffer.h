@@ -19,9 +19,18 @@
 #include <stdlib.h>
 #include <vcc.h>
 #include "myblob.h"
-//#include "mymem.h"
+#include "mymem.h"
 #include <limits.h>
 
+#define wrap_stuffer(stuffer) _(ghost stuffer->blob.val = \lambda size_t i; stuffer->blob.data[i];) \
+	_(ghost (&(stuffer->blob))->\owns = {((uint8_t[stuffer->blob.allocated]) stuffer->blob.data)};) \
+	_(wrap &(stuffer->blob)) \
+	_(assert stuffer->read_cursor <= stuffer->write_cursor && stuffer->write_cursor <= stuffer->blob.size;) \
+	_(ghost stuffer->\owns = {&(stuffer->blob)};) \
+	_(assert \inv(stuffer)) \
+	_(wrap stuffer) 
+
+#define GUARD( x )      if ( (x) < 0 ) return -1
 #define SYSTEM_PAGE_SIZE() 394857
 //#define _UI32_MAX UINT32_MAX
 
@@ -47,7 +56,8 @@ _(dynamic_owns) struct s2n_stuffer {
 	unsigned int tainted:1;
 
 	_(invariant \mine(&blob))
-	_(invariant read_cursor <= write_cursor <= \this->blob.size)
+	_(invariant read_cursor <= write_cursor && write_cursor <= \this->blob.size)
+	_(invariant !alloced ==> read_cursor == 0 && write_cursor == 0)
 	//TODO: ADD INVARIANTS FOR WIPED, TAINTED, ETC)
 	//_(invariant wiped ==> (\forall size_t i; i< blob.size ==> blob.data[i]==0))
 }s2n_stuffer;
@@ -58,56 +68,153 @@ _(dynamic_owns) struct s2n_stuffer {
 
 /* Initialize and destroying stuffers */
 extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
-	_(requires in->size ==> \extent_mutable(stuffer))
+	_(requires \mutable(stuffer))
 	_(requires \wrapped(in))
-	_(writes in->size? \extent(stuffer) : {})
+	_(requires in->size > 0)
+	_(writes \extent(stuffer))
 	_(writes in)
 	_(ensures \wrapped(stuffer) && \mutable(in))
 	_(requires in->size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(ensures stuffer->blob.size == in->size)
+	_(ensures \result <= 0)
 	//_(ensures \forall size_t i; i<in->size ==> stuffer->blob.val[i] == in->data[i])
 	_(ensures stuffer->wiped && !stuffer->alloced && !stuffer->growable && !stuffer->tainted )
-	_(ensures stuffer->read_cursor==stuffer->write_cursor==0)
+	_(ensures stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0)
 ;
+
+extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
+{
+	_(unwrap in)
+	stuffer->blob.data = in->data;
+	stuffer->blob.size = in->size;
+	stuffer->wiped = 1;
+	stuffer->alloced = 0;
+	stuffer->growable = 0;
+	stuffer->tainted = 0;
+	stuffer->read_cursor = 0;
+	stuffer->write_cursor = 0;
+	stuffer->blob.allocated = in->allocated;
+	stuffer->blob.user_allocated = 1;
+	wrap_stuffer(stuffer);
+	return 0;
+}
 
 extern int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
-	_(writes size? \extent(stuffer): {})
-	_(requires size ==> \extent_mutable(stuffer))
+	_(writes \extent(stuffer))
+	_(requires \extent_mutable(stuffer))
+	_(requires size>0)
 	_(requires size < _UI32_MAX - SYSTEM_PAGE_SIZE())
+	_(ensures \result <=0)
 	_(ensures \result || (\wrapped(stuffer) && stuffer->blob.size == size))
-	_(ensures !\result ==> stuffer->alloced)
-	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor==0) //follows from init
+	_(ensures !\result ==> stuffer->alloced && stuffer->blob.user_allocated)
+	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0) //follows from init
 ;
 
+int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
+{
+
+	GUARD(s2n_alloc(&stuffer->blob, size));
+	_(assert (&stuffer->blob)->size == size)
+	GUARD(s2n_stuffer_init(stuffer, &stuffer->blob)); //surely this proves that init can't require stuffer to be extent mutable?
+	_(unwrap stuffer)
+	stuffer->alloced = 1;
+	_(ghost (&(stuffer->blob))->\owns = {((uint8_t[stuffer->blob.allocated]) stuffer->blob.data)};)
+	_(wrap &(stuffer->blob))
+	_(assert stuffer->read_cursor <= stuffer->write_cursor && stuffer->write_cursor <= stuffer->blob.size)
+	_(ghost stuffer->\owns = {&(stuffer->blob)})
+	_(assert \inv(stuffer))
+	_(wrap stuffer)
+    return 0;
+}
+
 extern int s2n_stuffer_growable_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
-	_(writes size? \extent(stuffer): {})
-	_(requires size ==> \extent_mutable(stuffer))
+	_(writes \extent(stuffer))
+	_(requires \extent_mutable(stuffer))
+	_(requires size>0)
 	_(requires size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(ensures \result || (\wrapped(stuffer) && stuffer->blob.size == size))
 	_(ensures !\result ==> stuffer->growable && stuffer->alloced)
-	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor==0)
+	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0)
 ;
+
+int s2n_stuffer_growable_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
+{
+    GUARD(s2n_stuffer_alloc(stuffer, size));
+	_(unwrap stuffer)
+	_(unwrap &stuffer->blob)
+    stuffer->growable = 1;
+	wrap_stuffer(stuffer);
+    return 0;
+}
 
 extern int s2n_stuffer_free(struct s2n_stuffer *stuffer)
 	//_(requires memory_initialized())
 	_(requires \wrapped(stuffer))
 	_(writes stuffer)
-	_(ensures \extent_mutable(stuffer))
-	_(ensures !\result ==> stuffer->blob.size == 0)
-	_(ensures stuffer->read_cursor==stuffer->write_cursor==0)
+	_(ensures !\result ==> \extent_mutable(stuffer))
+	_(ensures !\result && stuffer->alloced ==> stuffer->blob.size == 0)
+	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0)
 ;
+
+int s2n_stuffer_free(struct s2n_stuffer *stuffer)
+{
+    if (stuffer->alloced == 0) {
+		_(unwrap stuffer)
+		_(unwrap &stuffer->blob)
+        return 0;
+    }
+    if (stuffer->wiped == 0) {
+        GUARD(s2n_stuffer_wipe(stuffer));
+    }
+	_(unwrap stuffer)
+    GUARD(s2n_free(&stuffer->blob));
+
+    stuffer->blob.data = NULL;
+    stuffer->blob.size = 0;
+	stuffer->write_cursor = 0; //ADDED MANUALLY
+	stuffer->read_cursor = 0;
+    return 0;
+}
 
 extern int s2n_stuffer_resize(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(writes stuffer)
-	_(maintains \wrapped(stuffer))
+	_(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
 	_(requires stuffer->growable)
 	_(requires !stuffer->tainted)
 	_(requires size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(ensures !\result ==> (stuffer->blob.size == size))
-	_(ensures !\result && size <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) <= stuffer->write_cursor ==> (\unchanged(stuffer->read_cursor) && stuffer->write_cursor == \old(stuffer->write_cursor)- size))
-	_(ensures !\result && size <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) > stuffer->write_cursor ==> (stuffer->read_cursor == stuffer->write_cursor == \old(stuffer->write_cursor)- size))
-	_(ensures !\result && size > \old(stuffer->write_cursor) ==> (stuffer->read_cursor == stuffer->write_cursor == 0))
+	_(ensures !\result && size >= stuffer->blob.size ==> \unchanged(stuffer->read_cursor) && \unchanged(stuffer->write_cursor))
+	_(ensures !\result && size < stuffer->blob.size ==> stuffer->write_cursor == \old(stuffer->write_cursor) - min(size, stuffer->write_cursor) && 
+		stuffer->read_cursor == min(\old(stuffer->read_cursor), stuffer->write_cursor))
 ;
+
+int s2n_stuffer_resize(struct s2n_stuffer *stuffer, const uint32_t size)
+{
+    if (stuffer->growable == 0) {
+        //S2N_ERROR(S2N_ERR_RESIZE_STATIC_STUFFER);
+		return -1;
+    }
+    if (stuffer->tainted == 1) {
+        //S2N_ERROR(S2N_ERR_RESIZE_TAINTED_STUFFER);
+		return -1;
+    }
+    if (size == stuffer->blob.size) {
+        return 0;
+    }
+	_(assert size >= stuffer->blob.size ==> \unchanged(stuffer->write_cursor) && \unchanged(stuffer->read_cursor))
+
+    if (size < stuffer->blob.size) {
+        GUARD(s2n_stuffer_wipe_n(stuffer, stuffer->blob.size - size));
+    }
+	//_(assert size >= stuffer->blob.size ==> \unchanged(stuffer->write_cursor) && \unchanged(stuffer->read_cursor))
+	_(unwrap stuffer)
+    GUARD(s2n_realloc(&stuffer->blob, size));
+	_(unwrap &stuffer->blob)
+    stuffer->blob.size = size;
+	wrap_stuffer(stuffer);
+    return 0;
+}
 
 extern int s2n_stuffer_reread(struct s2n_stuffer *stuffer)
 	_(maintains \wrapped(stuffer))
@@ -118,7 +225,7 @@ extern int s2n_stuffer_reread(struct s2n_stuffer *stuffer)
 extern int s2n_stuffer_rewrite(struct s2n_stuffer *stuffer)
 	_(writes stuffer)
 	_(maintains \wrapped(stuffer))
-	_(ensures stuffer->read_cursor == stuffer->write_cursor == 0)
+	_(ensures stuffer->read_cursor == stuffer->write_cursor && stuffer->write_cursor == 0)
 ;
 
 extern int s2n_stuffer_wipe(struct s2n_stuffer *stuffer)
@@ -126,7 +233,7 @@ extern int s2n_stuffer_wipe(struct s2n_stuffer *stuffer)
 	_(maintains \wrapped(stuffer))
 	_(ensures stuffer->tainted==0)
 	//_(ensures \forall size_t i; i<stuffer->write_cursor ==> stuffer->blob.val[i]== 0)
-	_(ensures !\result ==> (stuffer->write_cursor == stuffer->read_cursor == 0)) 
+	_(ensures !\result ==> (stuffer->write_cursor == stuffer->read_cursor && stuffer->write_cursor == 0)) 
 ;
 
 extern int s2n_stuffer_wipe_n(struct s2n_stuffer *stuffer, const uint32_t n)
@@ -134,9 +241,10 @@ extern int s2n_stuffer_wipe_n(struct s2n_stuffer *stuffer, const uint32_t n)
 	_(maintains \wrapped(stuffer))
 	//_(ensures \forall size_t i; i>= stuffer->write_cursor - min(n,stuffer->write_cursor) && i<stuffer->write_cursor
 	//	==> stuffer->blob.val[i] == 0)
-	_(ensures !\result && n <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) <= stuffer->write_cursor ==> (\unchanged(stuffer->read_cursor) && stuffer->write_cursor == \old(stuffer->write_cursor)- n))
-	_(ensures !\result && n <= \old(stuffer->write_cursor) && \old(stuffer->read_cursor) > stuffer->write_cursor ==> (stuffer->read_cursor == stuffer->write_cursor == \old(stuffer->write_cursor)- n))
-	_(ensures !\result && n > \old(stuffer->write_cursor) ==> (stuffer->read_cursor == stuffer->write_cursor == 0))
+	_(ensures \result <= 0)
+	_(ensures !\result ==> stuffer->write_cursor == \old(stuffer->write_cursor) - min(n, \old(stuffer->write_cursor)) && 
+		stuffer->read_cursor == min(\old(stuffer->read_cursor), stuffer->write_cursor))
+	_(ensures !\result ==> stuffer->write_cursor <= stuffer->blob.size - n)
 ;
 
 /* Basic read and write */
