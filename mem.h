@@ -28,7 +28,7 @@ int s2n_alloc(struct s2n_blob *b, uint32_t size)
  
 int s2n_realloc(struct s2n_blob *b, uint32_t size)
 	_(requires \wrapped(b))
-	_(ensures size ==> \wrapped(b))
+	_(ensures \wrapped(b))
 	_(requires size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(writes b)
 	_(ensures \result <= 0)
