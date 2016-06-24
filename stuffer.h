@@ -109,7 +109,7 @@ extern int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(ensures !\result ==> stuffer->alloced && stuffer->blob.user_allocated)
 	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0) //follows from init
 ;
-
+/*
 int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 {
 
@@ -126,7 +126,7 @@ int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(wrap stuffer)
     return 0;
 }
-
+*/
 extern int s2n_stuffer_growable_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(writes \extent(stuffer))
 	_(requires \extent_mutable(stuffer))
@@ -189,7 +189,7 @@ extern int s2n_stuffer_resize(struct s2n_stuffer *stuffer, const uint32_t size)
 		stuffer->read_cursor == min(\old(stuffer->read_cursor), stuffer->write_cursor))
 ;
 
-int s2n_stuffer_resize(struct s2n_stuffer *stuffer, const uint32_t size)
+/*extern int s2n_stuffer_resize(struct s2n_stuffer *stuffer, const uint32_t size)
 {
     if (stuffer->growable == 0) {
         //S2N_ERROR(S2N_ERR_RESIZE_STATIC_STUFFER);
@@ -214,7 +214,7 @@ int s2n_stuffer_resize(struct s2n_stuffer *stuffer, const uint32_t size)
     stuffer->blob.size = size;
 	wrap_stuffer(stuffer);
     return 0;
-}
+}*/
 
 extern int s2n_stuffer_reread(struct s2n_stuffer *stuffer)
 	_(maintains \wrapped(stuffer))
@@ -222,11 +222,30 @@ extern int s2n_stuffer_reread(struct s2n_stuffer *stuffer)
 	_(ensures stuffer->read_cursor == 0 && \unchanged(stuffer->write_cursor))
 ;
 
+extern int s2n_stuffer_reread(struct s2n_stuffer *stuffer)
+{
+	_(unwrap stuffer)
+    stuffer->read_cursor = 0;
+	_(wrap stuffer)
+    return 0;
+}
+
 extern int s2n_stuffer_rewrite(struct s2n_stuffer *stuffer)
 	_(writes stuffer)
 	_(maintains \wrapped(stuffer))
 	_(ensures stuffer->read_cursor == stuffer->write_cursor && stuffer->write_cursor == 0)
 ;
+
+extern int s2n_stuffer_rewrite(struct s2n_stuffer *stuffer)
+{
+	_(unwrap stuffer)
+    stuffer->write_cursor = 0;
+    if (stuffer->read_cursor > stuffer->write_cursor) {
+        stuffer->read_cursor = stuffer->write_cursor;
+    }
+	_(wrap stuffer)
+    return 0;
+}
 
 extern int s2n_stuffer_wipe(struct s2n_stuffer *stuffer)
 	_(writes stuffer)
