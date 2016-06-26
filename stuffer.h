@@ -251,22 +251,65 @@ extern int s2n_stuffer_rewrite(struct s2n_stuffer *stuffer)
 
 extern int s2n_stuffer_wipe(struct s2n_stuffer *stuffer)
 	_(writes stuffer)
-	_(maintains \wrapped(stuffer))
-	_(ensures stuffer->tainted==0)
+	_(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
+	_(ensures !\result ==> stuffer->tainted==0)
 	_(ensures \result <= 0)
 	//_(ensures \forall size_t i; i<stuffer->write_cursor ==> stuffer->blob.val[i]== 0)
 	_(ensures !\result ==> (stuffer->write_cursor == stuffer->read_cursor && stuffer->write_cursor == 0)) 
 ;
 
+int s2n_stuffer_wipe(struct s2n_stuffer *stuffer)
+{
+	_(unwrap stuffer)
+    stuffer->tainted = 0;
+	_(wrap stuffer)
+    return s2n_stuffer_wipe_n(stuffer, stuffer->write_cursor);
+}
+
 extern int s2n_stuffer_wipe_n(struct s2n_stuffer *stuffer, const uint32_t n)
 	_(writes stuffer)
-	_(maintains \wrapped(stuffer))
+	_(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
 	//_(ensures \forall size_t i; i>= stuffer->write_cursor - min(n,stuffer->write_cursor) && i<stuffer->write_cursor
 	//	==> stuffer->blob.val[i] == 0)
+	_(ensures !\result ==> \unchanged(stuffer->tainted))
 	_(ensures \result <= 0)
+	_(ensures !\result ==> (stuffer->write_cursor == 0 ==> stuffer->wiped))
 	_(ensures !\result ==> stuffer->write_cursor == \old(stuffer->write_cursor) - min(n, \old(stuffer->write_cursor)) && 
 		stuffer->read_cursor == min(\old(stuffer->read_cursor), stuffer->write_cursor))
 ;
+
+int s2n_stuffer_wipe_n(struct s2n_stuffer *stuffer, const uint32_t size)
+{
+    uint32_t n = size;
+    if (stuffer->write_cursor < n) {
+        n = stuffer->write_cursor;
+    }
+
+    // Use '0' instead of 0 precisely to prevent C string compatibility 
+	_(unwrap stuffer)
+	_(unwrap &stuffer->blob)
+    memset_check(stuffer->blob.data + stuffer->write_cursor - n, '0', n);
+    stuffer->write_cursor -= n;
+
+    if (stuffer->write_cursor == 0) {
+        stuffer->wiped = 1;
+    }
+    if (stuffer->write_cursor < stuffer->read_cursor) {
+        stuffer->read_cursor = stuffer->write_cursor;
+    }
+	_(ghost stuffer->blob.val = \lambda size_t i; stuffer->blob.data[i];) 
+	_(ghost (&(stuffer->blob))->\owns = {((uint8_t[stuffer->blob.allocated]) stuffer->blob.data)};) 
+	_(assert \inv(&stuffer->blob))
+	_(wrap &(stuffer->blob)) 
+	_(assert stuffer->read_cursor <= stuffer->write_cursor && stuffer->write_cursor <= stuffer->blob.size;) 
+	_(ghost stuffer->\owns = {&(stuffer->blob)};) 
+	_(assert \inv(stuffer)) 
+	_(wrap stuffer) 
+    return 0;
+}
+
 
 /* Basic read and write */
 extern int s2n_stuffer_read(struct s2n_stuffer *stuffer, struct s2n_blob *outt)
