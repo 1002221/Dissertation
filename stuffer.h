@@ -109,7 +109,8 @@ extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 	_(requires \mutable(stuffer))
 	_(requires \wrapped(in))
 	_(requires in->size > 0)
-	_(writes in == &stuffer->blob? \span(stuffer) : \extent(stuffer))
+	//_(writes in == &stuffer->blob ? \span(stuffer) : {})
+	_(writes in != &stuffer->blob ? \extent(stuffer) : {})
 	_(writes in)
 	_(ensures \wrapped(stuffer) && (in != &stuffer->blob ==> \mutable(in)))
 	_(requires in->size < _UI32_MAX - SYSTEM_PAGE_SIZE())
@@ -123,9 +124,10 @@ extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 
 extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 {
-	_(assume in == &stuffer->blob)
+	_(assume in != &stuffer->blob)
+	if(in != &stuffer->blob){ //TODO: remove this conditional
 	_(unwrap in)
-	stuffer->blob.data = in->data;
+	stuffer->blob.data = in->data;}
 	stuffer->blob.size = in->size;
 	stuffer->wiped = 1;
 	stuffer->alloced = 0;
