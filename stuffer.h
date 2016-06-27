@@ -8,7 +8,7 @@
  *  http://aws.amazon.com/apache2.0
  *
  * or in the "license" file accompanying this file. This file is distributed
- * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * on an "AS IS" BASIS, WITHoutt WARRANTIES OR CONDITIONS OF ANY KIND, either
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
@@ -362,6 +362,7 @@ extern int s2n_stuffer_read(struct s2n_stuffer *stuffer, struct s2n_blob *outt)
 	_(writes stuffer)
 	_(requires \wrapped(stuffer))
 	_(ensures !\result ==> \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(outt))
 	_(ensures \result <= 0)
 	_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor == \old(stuffer->read_cursor)+outt->size)
 	//_(ensures \forall size_t i; i<outt->size ==> outt->val[i] == stuffer->blob.val[i])
@@ -372,7 +373,7 @@ int s2n_stuffer_read(struct s2n_stuffer *stuffer, struct s2n_blob *outt)
 	//notnull_check(outt);
 	_(unwrap outt)
 	_(unwrap blob_data(outt))
-	return s2n_stuffer_read_bytes(stuffer, outt->data, outt->size);
+	{ int res = s2n_stuffer_read_bytes(stuffer, outt->data, outt->size); _(wrap blob_data(outt)) wrap_blob(outt); return res; }
 }
 
 extern int s2n_stuffer_read_bytes(struct s2n_stuffer *stuffer, uint8_t *outt, uint32_t n)
@@ -384,6 +385,7 @@ extern int s2n_stuffer_read_bytes(struct s2n_stuffer *stuffer, uint8_t *outt, ui
 	_(requires n <= s2n_stuffer_data_available(stuffer))
 	_(requires n>0)
 	_(ensures \result <= 0)
+	//_(ensures !\result ==> \wrapped(outt))
 	//_(ensures \forall size_t i; i<n ==> outt[i] == stuffer->blob.val[i])
 	_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor==\old(stuffer->read_cursor)+n)
 ;
@@ -402,6 +404,7 @@ extern int s2n_stuffer_read_bytes(struct s2n_stuffer *stuffer, uint8_t *data, ui
 	_(assert stuffer->read_cursor <= stuffer->write_cursor && stuffer->write_cursor <= stuffer->blob.size;) 
 	_(assert \inv(stuffer)) 
 	_(wrap stuffer) 
+	//_(wrap data)
     return 0;
 }
 
@@ -417,7 +420,7 @@ extern int s2n_stuffer_skip_read(struct s2n_stuffer *stuffer, uint32_t n)
 int s2n_stuffer_skip_read(struct s2n_stuffer *stuffer, uint32_t n)
 {
     //if (s2n_stuffer_data_available(stuffer) < n) {
-    //    S2N_ERROR(S2N_ERR_STUFFER_OUT_OF_DATA);
+    //    S2N_ERROR(S2N_ERR_STUFFER_outt_OF_DATA);
     //}
 	_(unwrap stuffer)
     stuffer->read_cursor += n;
