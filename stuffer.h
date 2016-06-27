@@ -542,39 +542,35 @@ GUARD(s2n_stuffer_skip_read(stuffer, size));
 	return 0;
 
 extern int s2n_stuffer_skip_write(struct s2n_stuffer *stuffer, const uint32_t n)
-	_(maintains \wrapped(stuffer))
+	_(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
 	_(writes stuffer)
+	_(ensures \result <= 0)
 	_(requires n <= s2n_stuffer_space_remaining( stuffer ) || stuffer->growable)
 	_(ensures !\result && stuffer->growable && n <= s2n_stuffer_space_remaining( stuffer ) && n<1024 ==> stuffer->blob.size == \old(stuffer->blob.size) + 1024)
 	_(ensures !\result && stuffer->growable && n <= s2n_stuffer_space_remaining( stuffer ) && n>=1024 ==> stuffer->blob.size == \old(stuffer->blob.size) + n) 
 	_(ensures !\result ==> (stuffer->write_cursor == \old(stuffer->write_cursor)+n && \unchanged(stuffer->read_cursor)))
 ;
 
-	_(requires \wrapped(stuffer))
-	_(ensures \wrapped(stuffer))
-	_(writes stuffer)
-	_(ensures \result <= 0)
-	_(requires n <= s2n_stuffer_data_available( stuffer ))
-	_(ensures stuffer->read_cursor == \old(stuffer->read_cursor)+n && \unchanged(stuffer->write_cursor))
-;
 
 int s2n_stuffer_skip_write(struct s2n_stuffer *stuffer, const uint32_t n)
 {
-    if (s2n_stuffer_space_remaining(stuffer) < n) {
-        if (stuffer->growable) {
-            /* Always grow a stuffer by at least 1k */
-            uint32_t growth = MAX(n, 1024);
-
-            GUARD(s2n_stuffer_resize(stuffer, stuffer->blob.size + growth));
-        } else {
-            //S2N_ERROR(S2N_ERR_STUFFER_IS_FULL);
-            return -1;
-        }
-    }
-
-    stuffer->write_cursor += n;
-    stuffer->wiped = 0;
-    return 0;
+	if (s2n_stuffer_space_remaining(stuffer) < n) {
+		if (stuffer->growable) {
+			/* Always grow a stuffer by at least 1k */
+			uint32_t growth = MAX(n, 1024);
+	
+			GUARD(s2n_stuffer_resize(stuffer, stuffer->blob.size + growth));
+		} else {
+			//S2N_ERROR(S2N_ERR_STUFFER_IS_FULL);
+			return -1;
+		}
+	}
+	_unwrap(stuffer)
+	stuffer->write_cursor += n;
+	stuffer->wiped = 0;
+    	_wrap(stuffer)
+	return 0;
 }
 
 /* Raw read/write move the cursor along and give you a pointer you can
