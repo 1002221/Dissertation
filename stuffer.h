@@ -410,11 +410,11 @@ extern int s2n_stuffer_read_bytes(struct s2n_stuffer *stuffer, uint8_t *data, ui
 
 extern int s2n_stuffer_skip_read(struct s2n_stuffer *stuffer, uint32_t n)
 	_(requires \wrapped(stuffer))
-	_(ensures !\result ==> \wrapped(stuffer))
+	_(ensures \wrapped(stuffer))
 	_(writes stuffer)
 	_(ensures \result <= 0)
 	_(requires n <= s2n_stuffer_data_available( stuffer ))
-	_(ensures !\result ==> (stuffer->read_cursor == \old(stuffer->read_cursor)+n && \unchanged(stuffer->write_cursor)))
+	_(ensures stuffer->read_cursor == \old(stuffer->read_cursor)+n && \unchanged(stuffer->write_cursor))
 ;
 
 int s2n_stuffer_skip_read(struct s2n_stuffer *stuffer, uint32_t n)
@@ -433,28 +433,27 @@ extern int s2n_stuffer_erase_and_read(struct s2n_stuffer *stuffer, struct s2n_bl
 	_(requires outt->size > 0)
 	_(requires outt->size <= s2n_stuffer_data_available(stuffer))
 	_(writes outt)
+	_(writes stuffer)
 	_(requires \wrapped(stuffer))
-	//_(ensures !\result ==> \wrapped(stuffer))
-	_(writes \extent(outt))
+	_(ensures !\result ==> \wrapped(stuffer))
 	//_(ensures \forall size_t i; i<outt->size ==> outt->val[i] == \old(stuffer->blob.val[i]))
 	//_(ensures \forall size_t i; i<outt->size ==> outt->val[i] == 0)
-	//_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor == \old(stuffer->read_cursor)+outt->size)
+	_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor == \old(stuffer->read_cursor)+outt->size)
 ;
 
-/*int s2n_stuffer_erase_and_read(struct s2n_stuffer *stuffer, struct s2n_blob *outt)
+int s2n_stuffer_erase_and_read(struct s2n_stuffer *stuffer, struct s2n_blob *outt)
 {
-	GUARD(s2n_stuffer_skip_read(stuffer, outt->size));
+	/*GUARD(*/s2n_stuffer_skip_read(stuffer, outt->size)/*)*/;
 	
 	_(unwrap stuffer)
 	_(unwrap &stuffer->blob)
     void *ptr = stuffer->blob.data + stuffer->read_cursor - outt->size;
-    if (ptr == NULL) {
-        return -1;
-    }
+    //if (ptr == NULL) {return -1;}
 	_(unwrap outt)
 	_(unwrap blob_data(outt))
-    memcpy_check(outt->data, ptr, outt->size);
+    memcpy/*_check*/(outt->data, ptr, outt->size);
     memset(ptr, 0, outt->size);
+	_(wrap blob_data(outt))
 	_(wrap outt)
 	_(ghost stuffer->blob.val = \lambda size_t i; stuffer->blob.data[i];) 
 	_(wrap &(stuffer->blob)) 
@@ -462,7 +461,7 @@ extern int s2n_stuffer_erase_and_read(struct s2n_stuffer *stuffer, struct s2n_bl
 	_(assert \inv(stuffer)) 
 	_(wrap stuffer) 
     return 0;
-}*/
+}
 
 
 extern int s2n_stuffer_write(struct s2n_stuffer *stuffer, const struct s2n_blob *in)
