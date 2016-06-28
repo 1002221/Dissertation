@@ -597,7 +597,8 @@ extern int s2n_stuffer_write_uint64(struct s2n_stuffer *stuffer, const uint64_t 
 /* Copy one stuffer to another */
 extern int s2n_stuffer_copy(struct s2n_stuffer *from, struct s2n_stuffer *to, uint32_t len)
 	_(requires \wrapped(from))
-	_(requires \wrapped(to))	
+	_(requires \wrapped(to))
+	_(requires to != from)
 	_(requires len <= s2n_stuffer_space_remaining(to) || to->growable)
 	_(requires to->write_cursor + len < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(requires to->blob.size + max(len, 1024) < _UI32_MAX - SYSTEM_PAGE_SIZE())
@@ -605,7 +606,7 @@ extern int s2n_stuffer_copy(struct s2n_stuffer *from, struct s2n_stuffer *to, ui
 	_(writes to)
 	_(writes from)
 	_(requires len<=s2n_stuffer_data_available(from))
-	_(ensures !\result ==> (\unchanged(from->write_cursor) && from->read_cursor == \old(from->read_cursor)+len && \unchanged(to->read_cursor) && from->write_cursor == \old(from->write_cursor)+len))
+	_(ensures !\result ==> (\unchanged(from->write_cursor) && from->read_cursor == \old(from->read_cursor)+len && \unchanged(to->read_cursor) && to->write_cursor == \old(to->write_cursor)+len))
 ;
 
 int s2n_stuffer_copy(struct s2n_stuffer *from, struct s2n_stuffer *to, const uint32_t len)
