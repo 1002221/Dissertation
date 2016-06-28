@@ -472,7 +472,7 @@ int s2n_stuffer_skip_write(struct s2n_stuffer *stuffer, const uint32_t n)
 	_(unwrap stuffer)
 	stuffer->write_cursor += n;
 	stuffer->wiped = 0;
-    _(wrap stuffer)
+        _(wrap stuffer)
 	return 0;
 }
 
