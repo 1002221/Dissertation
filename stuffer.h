@@ -38,7 +38,7 @@ _(dynamic_owns) struct s2n_stuffer {
 
 	/* The total size of the data segment */
 	/* Has the stuffer been wiped? */
-	unsigned int wiped:1;
+	unsigned int wiped:1; 
 
 	/* Was this stuffer alloc()'d ? */
 	unsigned int alloced:1;
