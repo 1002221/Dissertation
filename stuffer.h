@@ -611,18 +611,18 @@ extern int s2n_stuffer_copy(struct s2n_stuffer *from, struct s2n_stuffer *to, ui
 int s2n_stuffer_copy(struct s2n_stuffer *from, struct s2n_stuffer *to, const uint32_t len)
 {
 	_(assert len <= s2n_stuffer_space_remaining(to) || to->growable)
-    GUARD(s2n_stuffer_skip_read(from, len));
+	GUARD(s2n_stuffer_skip_read(from, len));
 	_(assert len <= s2n_stuffer_space_remaining(to) || to->growable)
 	
-    GUARD(s2n_stuffer_skip_write(to, len));
+	GUARD(s2n_stuffer_skip_write(to, len));
 	_(unwrap from)
 	_(unwrap &from->blob)
 	_(unwrap to)
 	_(unwrap &to->blob)
-    uint8_t *from_ptr = from->blob.data + from->read_cursor - len;
-    uint8_t *to_ptr = to->blob.data + to->write_cursor - len;
+	uint8_t *from_ptr = from->blob.data + from->read_cursor - len;
+	uint8_t *to_ptr = to->blob.data + to->write_cursor - len;
 
-    memcpy/*_check*/(to_ptr, from_ptr, len);
+	memcpy/*_check*/(to_ptr, from_ptr, len);
 	_(ghost from->blob.val = \lambda size_t i; from->blob.data[i];) 
 	_(wrap &(from->blob)) 
 	_(assert from->read_cursor <= from->write_cursor && from->write_cursor <= from->blob.size;) 
@@ -633,7 +633,7 @@ int s2n_stuffer_copy(struct s2n_stuffer *from, struct s2n_stuffer *to, const uin
 	_(assert to->read_cursor <= to->write_cursor && to->write_cursor <= to->blob.size;) 
 	_(assert \inv(to)) 
 	_(wrap to) 
-    return 0;
+	return 0;
 }
 
 /* Read and write base64 */
