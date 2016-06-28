@@ -500,13 +500,116 @@ extern int s2n_stuffer_recv_from_fd(struct s2n_stuffer *stuffer, int rfd, uint32
 extern int s2n_stuffer_send_to_fd(struct s2n_stuffer *stuffer, int wfd, uint32_t len);
 
 /* Read and write integers in network order */
-extern int s2n_stuffer_read_uint8(struct s2n_stuffer *stuffer, uint8_t *u);
-extern int s2n_stuffer_read_uint16(struct s2n_stuffer *stuffer, uint16_t *u);
-extern int s2n_stuffer_read_uint24(struct s2n_stuffer *stuffer, uint32_t *u);
-extern int s2n_stuffer_read_uint32(struct s2n_stuffer *stuffer, uint32_t *u);
+extern int s2n_stuffer_read_uint8(struct s2n_stuffer *stuffer, uint8_t *u)
+        _(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
+	_(requires \thread_local_array(u,1))
+	_(writes \array_range(u,1), stuffer)
+	_(requires 1 <= s2n_stuffer_data_available(stuffer))
+	_(ensures \result <= 0)
+	//_(ensures \forall size_t i; i<n ==> outt[i] == stuffer->blob.val[i])
+	_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor==\old(stuffer->read_cursor)+1)
+;
+
+int s2n_stuffer_read_uint8(struct s2n_stuffer *stuffer, uint8_t *u)
+{
+    GUARD(s2n_stuffer_read_bytes(stuffer, u, 1));
+
+    return 0;
+}
+
+extern int s2n_stuffer_read_uint16(struct s2n_stuffer *stuffer, uint16_t *u)
+        _(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
+	_(requires \thread_local_array(u,2))
+	_(writes \array_range(u,2), stuffer)
+	_(requires 2 <= s2n_stuffer_data_available(stuffer))
+	_(ensures \result <= 0)
+	//_(ensures \forall size_t i; i<n ==> outt[i] == stuffer->blob.val[i])
+	_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor==\old(stuffer->read_cursor)+2)
+;
+
+int s2n_stuffer_read_uint16(struct s2n_stuffer *stuffer, uint16_t *u)
+{
+    uint8_t data[2];
+
+    GUARD(s2n_stuffer_read_bytes(stuffer, data, sizeof(data)));
+
+    *u = data[0] << 8;
+    *u |= data[1];
+
+    return 0;
+}
+
+extern int s2n_stuffer_read_uint24(struct s2n_stuffer *stuffer, uint32_t *u)
+        _(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
+	_(requires \thread_local_array(u,3))
+	_(writes \array_range(u,3), stuffer)
+	_(requires 3 <= s2n_stuffer_data_available(stuffer))
+	_(ensures \result <= 0)
+	//_(ensures \forall size_t i; i<n ==> outt[i] == stuffer->blob.val[i])
+	_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor==\old(stuffer->read_cursor)+3)
+;
+
+int s2n_stuffer_read_uint24(struct s2n_stuffer *stuffer, uint32_t *u)
+{
+    uint8_t data[3];
+
+    GUARD(s2n_stuffer_read_bytes(stuffer, data, sizeof(data)));
+
+    *u = data[0] << 16;
+    //*u |= data[1] << 8;
+    //*u |= data[2];
+
+    return 0;
+}
+
+extern int s2n_stuffer_read_uint32(struct s2n_stuffer *stuffer, uint32_t *u)
+        _(requires \wrapped(stuffer))
+	_(ensures !\result ==> \wrapped(stuffer))
+	_(requires \thread_local_array(u,4))
+	_(writes \array_range(u,4), stuffer)
+	_(requires 4 <= s2n_stuffer_data_available(stuffer))
+	_(ensures \result <= 0)
+	//_(ensures \forall size_t i; i<n ==> outt[i] == stuffer->blob.val[i])
+	_(ensures !\result ==> \unchanged(stuffer->write_cursor) && stuffer->read_cursor==\old(stuffer->read_cursor)+4)
+;
+
+int s2n_stuffer_read_uint32(struct s2n_stuffer *stuffer, uint32_t *u)
+{
+    uint8_t data[4];
+
+    GUARD(s2n_stuffer_read_bytes(stuffer, data, sizeof(data)));
+
+    *u = ((uint32_t) data[0]) << 24;
+    //*u |= data[1] << 16;
+    //*u |= data[2] << 8;
+    //*u |= data[3];
+
+    return 0;
+}
+
 extern int s2n_stuffer_read_uint64(struct s2n_stuffer *stuffer, uint64_t *u);
 
-extern int s2n_stuffer_write_uint8(struct s2n_stuffer *stuffer, const uint8_t u);
+extern int s2n_stuffer_write_uint8(struct s2n_stuffer *stuffer, const uint8_t u)
+        _(requires \wrapped(stuffer) && \thread_local_array(u,1))
+	_(ensures !\result ==> \wrapped(stuffer))
+	_(requires stuffer->blob.size + 1024 < _UI32_MAX - SYSTEM_PAGE_SIZE())
+	_(writes stuffer)
+	_(requires 1 <= s2n_stuffer_space_remaining(stuffer))
+	_(ensures \result <= 0)
+	//_(ensures \forall size_t i; i<n ==> in[i] == stuffer->blob.val[i])
+	_(ensures !\result ==> (stuffer->write_cursor == \old(stuffer->write_cursor) + 1 && \unchanged(stuffer->read_cursor)))
+;
+
+int s2n_stuffer_write_uint8(struct s2n_stuffer *stuffer, const uint8_t u)
+{
+    GUARD(s2n_stuffer_write_bytes(stuffer, &u, 1));
+
+    return 0;
+}
+
 extern int s2n_stuffer_write_uint16(struct s2n_stuffer *stuffer, const uint16_t u);
 extern int s2n_stuffer_write_uint24(struct s2n_stuffer *stuffer, const uint32_t u);
 extern int s2n_stuffer_write_uint32(struct s2n_stuffer *stuffer, const uint32_t u);
