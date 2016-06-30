@@ -75,12 +75,29 @@ _(dynamic_owns) struct s2n_stuffer {
 #define s2n_stuffer_space_remaining( s )  ((s)->blob.size - (s)->write_cursor)
 
 /* Initialize and destroying stuffers */
-extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
+/*extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 	_(requires \mutable(stuffer))
 	_(requires \wrapped(in))
 	_(requires in->size > 0)
-	//_(writes in == &stuffer->blob ? \span(stuffer) : {})
-	_(writes in != &stuffer->blob ? {} : \extent(stuffer))
+        _(requires in == &stuffer->blob)
+	_(writes \span(stuffer))
+	_(writes in)
+	_(ensures \wrapped(stuffer) /*&& (in != &stuffer->blob ==> \mutable(in))*//*)
+	_(requires in->size < _UI32_MAX - SYSTEM_PAGE_SIZE())
+	_(ensures stuffer->blob.size == \old(in->size))
+	_(ensures \unchanged(in->size))
+	_(ensures \result <= 0)
+	//_(ensures \forall size_t i; i<in->size ==> stuffer->blob.val[i] == in->data[i])
+	_(ensures stuffer->wiped && !stuffer->alloced && !stuffer->growable && !stuffer->tainted )
+;
+*/
+
+extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
+	_(requires in== &stuffer->blob? \mutable(stuffer) : \extent_mutable(stuffer))
+	_(requires \wrapped(in))
+	_(requires in->size > 0)
+        //_(requires in != &stuffer->blob)
+	_(writes in== &stuffer->blob? \span(stuffer) : \extent(stuffer))
 	_(writes in)
 	_(ensures \wrapped(stuffer) && (in != &stuffer->blob ==> \mutable(in)))
 	_(requires in->size < _UI32_MAX - SYSTEM_PAGE_SIZE())
@@ -89,13 +106,13 @@ extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 	_(ensures \result <= 0)
 	//_(ensures \forall size_t i; i<in->size ==> stuffer->blob.val[i] == in->data[i])
 	_(ensures stuffer->wiped && !stuffer->alloced && !stuffer->growable && !stuffer->tainted )
-	_(ensures stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0)
 ;
 
-/*extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
+
+extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 {
-	_(assume in != &stuffer->blob)
 	_(unwrap in)
+        _(unwrap blob_data(in))
 	stuffer->blob.data = in->data;
 	stuffer->blob.size = in->size;
 	stuffer->wiped = 1;
@@ -106,10 +123,20 @@ extern int s2n_stuffer_init(struct s2n_stuffer *stuffer, struct s2n_blob *in)
 	stuffer->write_cursor = 0;
 	stuffer->blob.allocated = in->allocated;
 	stuffer->blob.user_allocated = 1;
-	wrap_stuffer(stuffer);
+        _(wrap blob_data(&stuffer->blob))
+        if(in != &stuffer->blob){
+            _(ghost {(&stuffer->blob)->val = \lambda size_t i; (&stuffer->blob)->data[i]; 
+            (&stuffer->blob)->\owns = (&stuffer->blob)->allocated ? {blob_data(&stuffer->blob)} : {};})
+	    _(wrap &(stuffer->blob)) 
+            _(ghost stuffer->\owns = {&stuffer->blob})
+            _(wrap stuffer)}
+        else{
+            _(wrap &(stuffer->blob))
+            _(ghost stuffer->\owns = {&stuffer->blob})
+            _(wrap stuffer)}
 	return 0;
 }
-*/
+
 extern int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(writes \extent(stuffer))
 	_(requires \extent_mutable(stuffer))
@@ -117,10 +144,9 @@ extern int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(requires size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(ensures \result <=0)
 	_(ensures \result || (\wrapped(stuffer) && stuffer->blob.size == size))
-	_(ensures !\result ==> stuffer->alloced && stuffer->blob.user_allocated)
-	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0) //follows from init
+	_(ensures !\result ==> stuffer->alloced)
 ;
-/*
+
 int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 {
 
@@ -129,14 +155,9 @@ int s2n_stuffer_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 	GUARD(s2n_stuffer_init(stuffer, &stuffer->blob)); //surely this proves that init can't require stuffer to be extent mutable?
 	_(unwrap stuffer)
 	stuffer->alloced = 1;
-	_(ghost (&(stuffer->blob))->\owns = {((uint8_t[stuffer->blob.allocated]) stuffer->blob.data)};)
-	_(wrap &(stuffer->blob))
-	_(assert stuffer->read_cursor <= stuffer->write_cursor && stuffer->write_cursor <= stuffer->blob.size)
-	_(ghost stuffer->\owns = {&(stuffer->blob)})
-	_(assert \inv(stuffer))
 	_(wrap stuffer)
     return 0;
-}*/
+}
 
 extern int s2n_stuffer_growable_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
 	_(writes \extent(stuffer))
@@ -144,7 +165,6 @@ extern int s2n_stuffer_growable_alloc(struct s2n_stuffer *stuffer, const uint32_
 	_(requires size>0 && size < _UI32_MAX - SYSTEM_PAGE_SIZE())
 	_(ensures \result || (\wrapped(stuffer) && stuffer->blob.size == size))
 	_(ensures !\result ==> stuffer->growable && stuffer->alloced)
-	_(ensures !\result ==> stuffer->read_cursor==stuffer->write_cursor && stuffer->write_cursor==0)
 ;
 
 int s2n_stuffer_growable_alloc(struct s2n_stuffer *stuffer, const uint32_t size)
@@ -675,14 +695,14 @@ extern int s2n_stuffer_write_uint24(struct s2n_stuffer *stuffer, const uint32_t 
 ;
 
 
-int s2n_stuffer_write_uint24(struct s2n_stuffer *stuffer, const uint32_t u)
+/*int s2n_stuffer_write_uint24(struct s2n_stuffer *stuffer, const uint32_t u)
 {
     uint8_t data[3] = {(uint8_t)(u >> 16), (uint8_t)(u >> 8), (uint8_t)(u & 0xff) };
 
     GUARD(s2n_stuffer_write_bytes(stuffer, data, sizeof(data)));
 
     return 0;
-}
+}*/
 
 extern int s2n_stuffer_write_uint32(struct s2n_stuffer *stuffer, const uint32_t u)
         _(requires \wrapped(stuffer))
