@@ -1,4 +1,5 @@
 #include <vcc.h>
+#include <stdint.h>
 
 #if defined(__LP32__)
 #define MD5_LONG unsigned long
@@ -93,28 +94,30 @@ typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_
     S2N_HASH_SHA512, S2N_HASH_MD5_SHA1
 } s2n_hash_algorithm; // as in, a s2n_hash_algorithm can only be of one of these types
 
-struct s2n_hash_state {
-    s2n_hash_algorithm alg; 
-    enum hash_ctx_tag {md5, sha1, sha224, sha256, sha384, sha512, md5_sha1};
-    _(dynamic_owns) struct hash_ctx{
-        enum hash_ctx_tag tag;
-        union {
+typedef _(dynamic_owns) struct s2n_hash_state {
+    s2n_hash_algorithm alg;
+    _(ghost int tag)
+    union {
+        MD5_CTX md5;
+        SHA_CTX sha1;
+        SHA256_CTX sha224;
+        SHA256_CTX sha256;
+        SHA512_CTX sha384;
+        SHA512_CTX sha512;
+        struct {
             MD5_CTX md5;
             SHA_CTX sha1;
-            SHA256_CTX sha224;
-            SHA256_CTX sha256;
-            SHA512_CTX sha384;
-            SHA512_CTX sha512;
-            struct {
-                MD5_CTX md5;
-                SHA_CTX sha1; 
-            } md5_sha1; 
-        }u;
-    _(invariant tag == sha1)
-    _(invariant tag == sha1 ==> \union_active(&u.sha1) && \mine(&u.sha1))
-    }hash_ctx;
-    
-} s2n_hash_state;
+        } md5_sha1;
+    } hash_ctx;
+    _(invariant tag==1)
+    _(invariant tag == 0 ==> \union_active(&hash_ctx.md5) && \mine(&hash_ctx.md5))
+    _(invariant tag == 1 ==> \union_active(&hash_ctx.sha1) && \mine(&hash_ctx.sha1))
+    _(invariant tag == 2 ==> \union_active(&hash_ctx.sha224) && \mine(&hash_ctx.sha224))
+    _(invariant tag == 3 ==> \union_active(&hash_ctx.sha256) && \mine(&hash_ctx.sha256))
+    _(invariant tag == 4 ==> \union_active(&hash_ctx.sha384) && \mine(&hash_ctx.sha384))
+    _(invariant tag == 5 ==> \union_active(&hash_ctx.sha512) && \mine(&hash_ctx.sha512))
+    _(invariant tag == 6 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1))
+};
 
 extern int s2n_hash_digest_size(s2n_hash_algorithm alg)
 _(requires alg >= 0 && alg <= 7)
@@ -137,7 +140,10 @@ int s2n_hash_digest_size(s2n_hash_algorithm alg)
 
 extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
 _(requires alg >= 0 && alg <= 7)
-_(ensures state->alg == alg)
+_(requires \extent_mutable(state))
+_(writes \extent(state))
+_(ensures \result <= 0)
+_(ensures !\result ==> state->alg == alg)
 ;
 
 int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
@@ -148,37 +154,92 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         r = 1;
         break;
     case S2N_HASH_MD5:
-        r = MD5_Init(&state->hash_ctx->u.md5);
+        //r = MD5_Init(&state->hash_ctx.md5);
         break;
     case S2N_HASH_SHA1:
-        r = SHA1_Init(&state->hash_ctx.sha1);
+        //r = SHA1_Init(&state->hash_ctx.sha1);
         break;
     case S2N_HASH_SHA224:
-        r = SHA224_Init(&state->hash_ctx.sha224);
+        //r = SHA224_Init(&state->hash_ctx.sha224);
         break;
     case S2N_HASH_SHA256:
-        r = SHA256_Init(&state->hash_ctx.sha256);
+        //r = SHA256_Init(&state->hash_ctx.sha256);
         break;
     case S2N_HASH_SHA384:
-        r = SHA384_Init(&state->hash_ctx.sha384);
+        //r = SHA384_Init(&state->hash_ctx.sha384);
         break;
     case S2N_HASH_SHA512:
-        r = SHA512_Init(&state->hash_ctx.sha512);
+        //r = SHA512_Init(&state->hash_ctx.sha512);
         break;
     case S2N_HASH_MD5_SHA1:
-        r = SHA1_Init(&state->hash_ctx.md5_sha1.sha1);
-        r &= MD5_Init(&state->hash_ctx.md5_sha1.md5);
+        //r = SHA1_Init(&state->hash_ctx.md5_sha1.sha1);
+        //r &= MD5_Init(&state->hash_ctx.md5_sha1.md5);
         break;
 
     default:
-        S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        return -1;
     }
 
     if (r == 0) {
-        S2N_ERROR(S2N_ERR_HASH_INIT_FAILED);
+        //S2N_ERROR(S2N_ERR_HASH_INIT_FAILED);
+        return -1;
     }
 
     state->alg = alg;
+    _(ghost state->tag = 1)
+    _(union_reinterpret &(state->hash_ctx.sha1))
+    _(wrap &(state->hash_ctx.sha1))
+    _(ghost state->\owns = {&(state->hash_ctx.sha1)})
+    _(wrap state)
+    return 0;
+}
+
+extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
+_(requires \wrapped(state))
+_(ensures \result <= 0)
+_(ensures !\result ==> \wrapped(state))
+;
+
+
+int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t size)
+{
+    int r;
+    switch (state->alg) {
+    case S2N_HASH_NONE:
+        r = 1;
+        break;
+    case S2N_HASH_MD5:
+        //r = MD5_Update(&state->hash_ctx.md5, data, size);
+        break;
+    case S2N_HASH_SHA1:
+        //r = SHA1_Update(&state->hash_ctx.sha1, data, size);
+        break;
+    case S2N_HASH_SHA224:
+        //r = SHA224_Update(&state->hash_ctx.sha224, data, size);
+        break;
+    case S2N_HASH_SHA256:
+        //r = SHA256_Update(&state->hash_ctx.sha256, data, size);
+        break;
+    case S2N_HASH_SHA384:
+        //r = SHA384_Update(&state->hash_ctx.sha384, data, size);
+        break;
+    case S2N_HASH_SHA512:
+        //r = SHA512_Update(&state->hash_ctx.sha512, data, size);
+        break;
+    case S2N_HASH_MD5_SHA1:
+        //r = SHA1_Update(&state->hash_ctx.md5_sha1.sha1, data, size);
+        //r &= MD5_Update(&state->hash_ctx.md5_sha1.md5, data, size);
+        break;
+    default:
+        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        return -1;
+    }
+
+    if (r == 0) {
+        //S2N_ERROR(S2N_ERR_HASH_UPDATE_FAILED);
+        return -1;
+    }
 
     return 0;
 }
