@@ -353,7 +353,7 @@ int s2n_hash_reset(struct s2n_hash_state *state)
 
 extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(requires \mutable(to))
-    _(requires to->alg ==2)
+    _(requires to->alg == S2N_HASH_SHA1)
     _(requires \wrapped(from))
     _(requires from != to)
     _(writes \extent(to))
