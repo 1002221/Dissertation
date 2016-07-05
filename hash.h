@@ -101,6 +101,7 @@ int SHA512_Init(SHA512_CTX *c);
 
 int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
     _(requires \wrapped(c))
+    _(requires \thread_local_array(data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -224,6 +225,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
 
 extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
     _(requires \wrapped(state))
+    _(requires \thread_local_array(in,size))
     _(writes state)
     _(ensures \result <= 0)
     _(ensures \wrapped(state))
@@ -265,10 +267,10 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
         return -1;
     }
 
-    if (r == 0) {
+    /*if (r == 0) {
         //S2N_ERROR(S2N_ERR_HASH_UPDATE_FAILED);
         return -1;
-    }
+    }*/
     _(wrap &state->hash_ctx)
     _(wrap state)
     return 0;
@@ -325,10 +327,10 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         return -1;
     }
 
-    if (r == 0) {
+    /*if (r == 0) {
         //S2N_ERROR(S2N_ERR_HASH_DIGEST_FAILED);
         return -1;
-    }
+    }*/
     _(wrap &state->hash_ctx)
     _(wrap state)
     return 0;
