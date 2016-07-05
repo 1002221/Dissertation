@@ -114,6 +114,8 @@ int SHA1_Final(void *md, SHA_CTX *c)
     _(ensures \result == 1)
 ;
 
+#define eq_check(a, b)  do { if ( (a) != (b) ) {/* S2N_ERROR(S2N_ERR_SAFETY)*/ return -1; } } while(0)
+
 typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_HASH_SHA256, S2N_HASH_SHA384,
     S2N_HASH_SHA512, S2N_HASH_MD5_SHA1
 } s2n_hash_algorithm; 
@@ -145,6 +147,7 @@ typedef _(dynamic_owns) struct s2n_hash_state {
 };
 
 extern int s2n_hash_digest_size(s2n_hash_algorithm alg)
+    _(requires 0 <= alg && alg <= 7)
     _(ensures alg == S2N_HASH_NONE ==> \result == 0)
     _(ensures alg == S2N_HASH_MD5 ==> \result == MD5_DIGEST_LENGTH)
     _(ensures alg == S2N_HASH_SHA1 ==> \result == SHA_DIGEST_LENGTH)
@@ -277,7 +280,7 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
 
 extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state) && \mutable(outt))
-    _(requires state->alg == S2N_HASH_SHA1 ==> size <= SHA_DIGEST_LENGTH)
+    _(requires state->alg == S2N_HASH_SHA1 ==> size == SHA_DIGEST_LENGTH)
     _(writes state, outt)
     _(ensures \result <= 0)
     _(ensures \wrapped(state))
@@ -286,6 +289,7 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
 int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
 {
     int r;
+    _(assert state->alg == S2N_HASH_SHA1)
     _(unwrap state)
     _(unwrap &state->hash_ctx)
     switch (state->alg) {
@@ -297,7 +301,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         //r = MD5_Final(out, &state->hash_ctx.md5);
         break;
     case S2N_HASH_SHA1:
-        //eq_check(size, SHA_DIGEST_LENGTH);
+        eq_check(size, SHA_DIGEST_LENGTH);
         r = SHA1_Final(outt, &state->hash_ctx.sha1);
         break;
     case S2N_HASH_SHA224:
