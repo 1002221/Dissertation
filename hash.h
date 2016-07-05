@@ -91,6 +91,7 @@ int SHA1_Init(SHA_CTX *c)
     _(requires \mutable(c))
     _(writes c)
     _(ensures \wrapped(c))
+    _(ensures \result == 1)
 ;
 
 int SHA224_Init(SHA256_CTX *c);
@@ -102,12 +103,14 @@ int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
     _(requires \wrapped(c))
     _(writes c)
     _(ensures \wrapped(c))
+    _(ensures \result == 1)
 ;
 
 int SHA1_Final(void *md, SHA_CTX *c)
-    _(requires \wrapped(c) && \mutable(md))
+    _(requires \wrapped(c) && \thread_local(md))
     _(writes md, c)
     _(ensures \wrapped(c))
+    _(ensures \result == 1)
 ;
 
 typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_HASH_SHA256, S2N_HASH_SHA384,
@@ -116,7 +119,6 @@ typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_
 
 typedef _(dynamic_owns) struct s2n_hash_state {
     s2n_hash_algorithm alg;
-    _(ghost int tag)
     union {
         MD5_CTX md5;
         SHA_CTX sha1;
@@ -130,14 +132,15 @@ typedef _(dynamic_owns) struct s2n_hash_state {
         } md5_sha1;
     } hash_ctx;
     _(invariant \mine(&hash_ctx.sha1))
-    _(invariant tag==1)
-    _(invariant tag == 0 ==> \union_active(&hash_ctx.md5) && \mine(&hash_ctx.md5) && \mine(&hash_ctx))
-    _(invariant tag == 1 ==> \union_active(&hash_ctx.sha1) && \mine(&hash_ctx.sha1) && \mine(&hash_ctx))
-    _(invariant tag == 2 ==> \union_active(&hash_ctx.sha224) && \mine(&hash_ctx.sha224) && \mine(&hash_ctx))
-    _(invariant tag == 3 ==> \union_active(&hash_ctx.sha256) && \mine(&hash_ctx.sha256) && \mine(&hash_ctx))
-    _(invariant tag == 4 ==> \union_active(&hash_ctx.sha384) && \mine(&hash_ctx.sha384) && \mine(&hash_ctx))
-    _(invariant tag == 5 ==> \union_active(&hash_ctx.sha512) && \mine(&hash_ctx.sha512) && \mine(&hash_ctx))
-    _(invariant tag == 6 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1) && \mine(&hash_ctx))
+    _(invariant alg==2)
+    _(invariant alg == 1 ==> \union_active(&hash_ctx.md5) && \mine(&hash_ctx.md5))
+    _(invariant alg == 2 ==> \union_active(&hash_ctx.sha1) && \mine(&hash_ctx.sha1))
+    _(invariant alg == 3 ==> \union_active(&hash_ctx.sha224) && \mine(&hash_ctx.sha224))
+    _(invariant alg == 4 ==> \union_active(&hash_ctx.sha256) && \mine(&hash_ctx.sha256))
+    _(invariant alg == 5 ==> \union_active(&hash_ctx.sha384) && \mine(&hash_ctx.sha384))
+    _(invariant alg == 6 ==> \union_active(&hash_ctx.sha512) && \mine(&hash_ctx.sha512))
+    _(invariant alg == 7 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1))
+    _(invariant \mine(&hash_ctx))
 };
 
 extern int s2n_hash_digest_size(s2n_hash_algorithm alg)
@@ -160,13 +163,12 @@ int s2n_hash_digest_size(s2n_hash_algorithm alg)
 }
 
 extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
-    _(requires alg ==2)
-    _(requires alg == state->alg)
+    _(requires alg == S2N_HASH_SHA1)
     _(requires \extent_mutable(state))
     _(writes \extent(state))
     _(ensures \result <= 0)
-    _(ensures !\result ==> state->alg == alg)
-    _(ensures !\result ==> \wrapped(state))
+    _(ensures state->alg == alg)
+    _(ensures \wrapped(state))
 ;
 
 int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
@@ -180,7 +182,6 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         r = MD5_Init(&state->hash_ctx.md5);
         break;
     case S2N_HASH_SHA1:
-        _(ghost state->tag = 1)
         _(union_reinterpret &state->hash_ctx.sha1)
         r = SHA1_Init(&state->hash_ctx.sha1);
         break;
@@ -206,17 +207,16 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         return -1;
     }
 
-    if (r == 0) {
+    /*if (r == 0) {
         //S2N_ERROR(S2N_ERR_HASH_INIT_FAILED);
-        return -1;
-    }
+        //return -1;
+    }*/
 
     state->alg = alg;
     if(alg==2) {
-        
         _(wrap &state->hash_ctx)
         _(ghost state->\owns = {&state->hash_ctx.sha1, &state->hash_ctx})
-        _(wrap state)
+        _(wrap state);
     }
     
     return 0;
@@ -224,11 +224,9 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
 
 extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
     _(requires \wrapped(state))
-    _(requires state->tag == 1)
-    _(requires state->alg == 2)
     _(writes state)
     _(ensures \result <= 0)
-    _(ensures !\result ==> \wrapped(state))
+    _(ensures \wrapped(state))
 ;
 
 int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t size)
@@ -278,12 +276,10 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
 
 extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state) && \mutable(outt))
-    _(requires state->tag == 1)
-    _(requires state->alg == 2)
     _(requires state->alg == 2 ==> size <= SHA_DIGEST_LENGTH)
     _(writes state, outt)
     _(ensures \result <= 0)
-    _(ensures !\result ==> \wrapped(state))
+    _(ensures \wrapped(state))
 ;
 
 int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
@@ -340,10 +336,8 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
 
 extern int s2n_hash_reset(struct s2n_hash_state *state)
     _(requires \wrapped(state))
-    _(requires state->tag == 1)
-    _(requires state->alg == 2)
     _(writes state)
-    _(ensures !\result ==> \wrapped(state))
+    _(ensures \wrapped(state))
     _(ensures \result <= 0)
 ;
 
@@ -357,22 +351,22 @@ int s2n_hash_reset(struct s2n_hash_state *state)
 }
 
 extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
-    _(requires \wrapped(to))
-    _(requires to->tag == 1)
+    _(requires \mutable(to))
+    _(requires to->alg ==2)
     _(requires \wrapped(from))
-    _(requires from->tag == 1)
     _(requires from != to)
-    _(writes from, to)
+    _(writes \extent(to))
     _(ensures \wrapped(from) && \wrapped(to))
     _(ensures \result <= 0)
 ; 
 
 int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
 {
-    _(unwrap to)
-    _(unwrap from)
     memcpy/*_check*/(to, from, sizeof(struct s2n_hash_state));
-    _(wrap from)
+    _(union_reinterpret &to->hash_ctx.sha1)
+    _(wrap &to->hash_ctx)
+    _(wrap &to->hash_ctx.sha1)
+    _(ghost to->\owns = {&to->hash_ctx.sha1, &to->hash_ctx})
     _(wrap to)
     return 0;
 }
