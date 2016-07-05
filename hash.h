@@ -133,27 +133,26 @@ typedef _(dynamic_owns) struct s2n_hash_state {
         } md5_sha1;
     } hash_ctx;
     _(invariant \mine(&hash_ctx.sha1))
-    _(invariant alg==2)
-    _(invariant alg == 1 ==> \union_active(&hash_ctx.md5) && \mine(&hash_ctx.md5))
-    _(invariant alg == 2 ==> \union_active(&hash_ctx.sha1) && \mine(&hash_ctx.sha1))
-    _(invariant alg == 3 ==> \union_active(&hash_ctx.sha224) && \mine(&hash_ctx.sha224))
-    _(invariant alg == 4 ==> \union_active(&hash_ctx.sha256) && \mine(&hash_ctx.sha256))
-    _(invariant alg == 5 ==> \union_active(&hash_ctx.sha384) && \mine(&hash_ctx.sha384))
-    _(invariant alg == 6 ==> \union_active(&hash_ctx.sha512) && \mine(&hash_ctx.sha512))
-    _(invariant alg == 7 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1))
+    _(invariant alg == S2N_HASH_SHA1)
+    _(invariant alg == S2N_HASH_MD5 ==> \union_active(&hash_ctx.md5) && \mine(&hash_ctx.md5))
+    _(invariant alg == S2N_HASH_SHA1 ==> \union_active(&hash_ctx.sha1) && \mine(&hash_ctx.sha1))
+    _(invariant alg == S2N_HASH_SHA224 ==> \union_active(&hash_ctx.sha224) && \mine(&hash_ctx.sha224))
+    _(invariant alg == S2N_HASH_SHA256 ==> \union_active(&hash_ctx.sha256) && \mine(&hash_ctx.sha256))
+    _(invariant alg == S2N_HASH_SHA384 ==> \union_active(&hash_ctx.sha384) && \mine(&hash_ctx.sha384))
+    _(invariant alg == S2N_HASH_SHA512 ==> \union_active(&hash_ctx.sha512) && \mine(&hash_ctx.sha512))
+    _(invariant alg == S2N_HASH_MD5_SHA1 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1))
     _(invariant \mine(&hash_ctx))
 };
 
 extern int s2n_hash_digest_size(s2n_hash_algorithm alg)
-    _(requires alg >= 0 && alg <= 7)
-    _(ensures alg == 0 ==> \result == 0)
-    _(ensures alg == 1 ==> \result == MD5_DIGEST_LENGTH)
-    _(ensures alg == 2 ==> \result == SHA_DIGEST_LENGTH)
-    _(ensures alg == 3 ==> \result == SHA224_DIGEST_LENGTH)
-    _(ensures alg == 4 ==> \result == SHA256_DIGEST_LENGTH)
-    _(ensures alg == 5 ==> \result == SHA384_DIGEST_LENGTH)
-    _(ensures alg == 6 ==> \result == SHA512_DIGEST_LENGTH)
-    _(ensures alg == 7 ==> \result == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_NONE ==> \result == 0)
+    _(ensures alg == S2N_HASH_MD5 ==> \result == MD5_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA1 ==> \result == SHA_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA224 ==> \result == SHA224_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA256 ==> \result == SHA256_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA384 ==> \result == SHA384_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA512 ==> \result == SHA512_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_MD5_SHA1 ==> \result == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
 ;
 
 int s2n_hash_digest_size(s2n_hash_algorithm alg)
@@ -214,7 +213,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
     }*/
 
     state->alg = alg;
-    if(alg==2) {
+    if(alg==S2N_HASH_SHA1) {
         _(wrap &state->hash_ctx)
         _(ghost state->\owns = {&state->hash_ctx.sha1, &state->hash_ctx})
         _(wrap state);
@@ -278,7 +277,7 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
 
 extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state) && \mutable(outt))
-    _(requires state->alg == 2 ==> size <= SHA_DIGEST_LENGTH)
+    _(requires state->alg == S2N_HASH_SHA1 ==> size <= SHA_DIGEST_LENGTH)
     _(writes state, outt)
     _(ensures \result <= 0)
     _(ensures \wrapped(state))
