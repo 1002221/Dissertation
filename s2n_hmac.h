@@ -157,9 +157,6 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     uint32_t copied = klen;
     
     if (klen > state->block_size) {
-        //_(unwrap &state->outer)
-        //_(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha1, &(&state->outer)->hash_ctx})
-        //_(wrap &state->outer)
         /*GUARD(*/s2n_hash_update(&state->outer, key, klen)/*)*/;
         /*GUARD(*/s2n_hash_digest(&state->outer, state->digest_pad, state->digest_size)/*)*/; 
 
