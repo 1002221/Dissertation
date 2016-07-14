@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#define notnull_check( ptr )    do { if ( (ptr) == NULL ) { return -1; } }                          while(0)
+#define memcpy_check( d, s, n ) do { if ( (n) ) { notnull_check( (d) ); memcpy( (d), (s), (n)); } } while(0)
+#define memset_check( d, c, n ) do { if ( (n) ) { notnull_check( (d) ); memset( (d), (c), (n)); } } while(0)
+
 #if defined(__LP32__)
     #define MD5_LONG unsigned long
 #elif defined(OPENSSL_SYS_CRAY) || defined(__ILP64__)
@@ -44,7 +48,6 @@ typedef struct MD5state_st
 	    SHA_LONG Nl,Nh;
 	    SHA_LONG data[SHA_LBLOCK];
 	    unsigned int num;
-        //_(invariant \mine((SHA_LONG[SHA_LBLOCK])data))
 	    } SHA_CTX;
     typedef struct SHA256state_st
 	    {
@@ -101,7 +104,7 @@ int SHA512_Init(SHA512_CTX *c);
 
 int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
     _(requires \wrapped(c))
-    _(requires \thread_local_array(data,len))
+    _(requires \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -211,26 +214,27 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         return -1;
     }
 
-    /*if (r == 0) {
+    if (r == 0) {
         //S2N_ERROR(S2N_ERR_HASH_INIT_FAILED);
-        //return -1;
-    }*/
-
+        return -1;
+    }
+    
     state->alg = alg;
     if(alg==S2N_HASH_SHA1) {
         _(wrap &state->hash_ctx)
         _(ghost state->\owns = {&state->hash_ctx.sha1, &state->hash_ctx})
         _(wrap state);
     }
-    
     return 0;
 }
 
 extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
     _(requires \wrapped(state))
-    _(requires \thread_local_array((uint8_t *)in,size))
+    _(requires \thread_local_array((uint8_t *) in,size))
+    _(requires !((uint8_t *)in \in \domain(&state->hash_ctx.sha1)))
     _(writes state)
     _(ensures \result == 0)
+    _(ensures \unchanged(state->alg))
     _(ensures \wrapped(state))
 ;
 
@@ -238,7 +242,6 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
 {
     int r;
     _(unwrap state)
-    //_(unwrap &state->hash_ctx)
     switch (state->alg) {
     case S2N_HASH_NONE:
         r = 1;
@@ -270,17 +273,17 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
         return -1;
     }
 
-    /*if (r == 0) {
+    if (r == 0) {
         //S2N_ERROR(S2N_ERR_HASH_UPDATE_FAILED);
         return -1;
-    }*/
-    //_(wrap &state->hash_ctx)
+    }
     _(wrap state)
     return 0;
 }
 
 extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state) && \thread_local_array((uint8_t *)outt,size))
+    _(requires state->alg == S2N_HASH_SHA1)
     _(requires state->alg == S2N_HASH_SHA1 ==> size == SHA_DIGEST_LENGTH)
     _(writes state, outt)
     _(ensures \result <= 0)
@@ -331,10 +334,10 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         return -1;
     }
 
-    /*if (r == 0) {
+    if (r == 0) {
         //S2N_ERROR(S2N_ERR_HASH_DIGEST_FAILED);
         return -1;
-    }*/
+    }
     _(wrap &state->hash_ctx)
     _(wrap state)
     return 0;
@@ -353,7 +356,6 @@ int s2n_hash_reset(struct s2n_hash_state *state)
     _(unwrap state)
     _(unwrap &state->hash_ctx)
     _(unwrap &state->hash_ctx.sha1)
-    _(union_reinterpret &state->hash_ctx.sha1)
     return s2n_hash_init(state, state->alg);
 }
 
@@ -369,7 +371,7 @@ extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
 
 int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
 {
-    memcpy/*_check*/(to, from, sizeof(struct s2n_hash_state));
+    memcpy_check(to, from, sizeof(struct s2n_hash_state));
     _(union_reinterpret &to->hash_ctx.sha1)
     _(wrap &to->hash_ctx)
     _(wrap &to->hash_ctx.sha1)
