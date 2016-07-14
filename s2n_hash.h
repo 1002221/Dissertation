@@ -108,7 +108,7 @@ int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
 ;
 
 int SHA1_Final(void *md, SHA_CTX *c)
-    _(requires \wrapped(c) && \mutable(md))
+    _(requires \wrapped(c) && \thread_local(md))
     _(writes md, c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -228,7 +228,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
 
 extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
     _(requires \wrapped(state))
-    _(requires \thread_local_array(in,size))
+    _(requires \thread_local_array((uint8_t *)in,size))
     _(writes state)
     _(ensures \result == 0)
     _(ensures \wrapped(state))
@@ -280,7 +280,7 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
 }
 
 extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
-    _(requires \wrapped(state) && \mutable(outt))
+    _(requires \wrapped(state) && \thread_local_array((uint8_t *)outt,size))
     _(requires state->alg == S2N_HASH_SHA1 ==> size == SHA_DIGEST_LENGTH)
     _(writes state, outt)
     _(ensures \result <= 0)
