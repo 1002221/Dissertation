@@ -72,13 +72,10 @@ struct s2n_hmac_state {
     uint8_t digest_pad[SHA512_DIGEST_LENGTH];
 
     _(invariant alg == S2N_HMAC_SHA1)
-    _(invariant \mine(&inner) && \mine(&outer) && \mine(&inner_just_key) /*&& \mine((uint8_t[SHA512_DIGEST_LENGTH])digest_pad)*/)
-    _(invariant !((uint8_t *) digest_pad \in \domain(&inner)))
-    _(invariant !((uint8_t *) digest_pad \in \domain(&outer)))
-    _(invariant !((uint8_t *) digest_pad \in \domain(&inner_just_key)))
-    _(invariant !((uint8_t *) xor_pad \in \domain(&inner)))
-    _(invariant !((uint8_t *) xor_pad \in \domain(&outer)))
-    _(invariant !((uint8_t *) xor_pad \in \domain(&inner_just_key)))
+    _(invariant (&inner)->alg == S2N_HASH_SHA1)
+    _(invariant (&inner_just_key)->alg == S2N_HASH_SHA1)
+    _(invariant (&outer)->alg == S2N_HASH_SHA1)
+    _(invariant \mine(&inner) && \mine(&outer) && \mine(&inner_just_key))
     _(invariant (&outer)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
     _(invariant (&inner)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
     _(invariant (&inner_just_key)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
@@ -167,13 +164,17 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         //S2N_ERROR(S2N_ERR_HMAC_INVALID_ALGORITHM);
         return -1;
     }
+    _(assert sizeof(state->xor_pad) >= state->block_size)
+    _(assert sizeof(state->digest_pad) >= state->digest_size)
+/*
     gte_check(sizeof(state->xor_pad), state->block_size);
-    gte_check(sizeof(state->digest_pad), state->digest_size);
+    gte_check(sizeof(state->digest_pad), state->digest_size);*/
+    
     state->alg = alg;
     
-    if (alg == S2N_HMAC_SSLv3_SHA1 || alg == S2N_HMAC_SSLv3_MD5) {
+    /*if (alg == S2N_HMAC_SSLv3_SHA1 || alg == S2N_HMAC_SSLv3_MD5) {
         //return s2n_sslv3_mac_init(state, alg, key, klen);
-    }
+    }*/
 
     GUARD(s2n_hash_init(&state->inner_just_key, hash_alg));
     GUARD(s2n_hash_init(&state->outer, hash_alg));
@@ -261,26 +262,28 @@ extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t si
     _(requires \thread_local_array((uint8_t *)outt, size))
     _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
     _(requires \thread_local_array((uint8_t *)state->xor_pad, state->block_size))
-    _(requires !((uint8_t *) outt \in \domain(&state->outer)))
-    _(writes state, (uint8_t *)outt)
+    _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
+    _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
+    _(requires size == SHA_DIGEST_LENGTH)
+    _(writes state, outt)
     _(ensures !\result ==> \wrapped(state))
     _(ensures \unchanged(state->hash_block_size))
     _(ensures \result <= 0);
 
 int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
 {
-    if (state->alg == S2N_HMAC_SSLv3_SHA1 || state->alg == S2N_HMAC_SSLv3_MD5) {
+    /*if (state->alg == S2N_HMAC_SSLv3_SHA1 || state->alg == S2N_HMAC_SSLv3_MD5) {
         //return s2n_sslv3_mac_digest(state, out, size);
-    }
-    _(unwrap state)
+    }*/
+    _(unwrap state)     
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
     GUARD(s2n_hash_reset(&state->outer));
     GUARD(s2n_hash_update(&state->outer, state->xor_pad, state->block_size));
     GUARD(s2n_hash_update(&state->outer, state->digest_pad, state->digest_size));
 
     { 
-        int res = s2n_hash_digest(&state->outer, (uint8_t *)outt, size);
-        _(wrap state) 
+        int res = s2n_hash_digest(&state->outer,outt, size);
+        _(wrap state)
         return res; 
     }
 }
@@ -291,15 +294,17 @@ extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, 
     _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
     _(requires \thread_local_array((uint8_t *)state->xor_pad, state->block_size))
     _(requires \thread_local_array((uint8_t *)state->xor_pad, state->hash_block_size))
-    _(requires !((uint8_t *) outt \in \domain(&state->outer)))
-    _(writes state, (uint8_t *)outt)
+    _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
+    _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
+    _(requires state->alg == S2N_HMAC_SHA1 ==> size == SHA_DIGEST_LENGTH)
+    _(writes state, outt)
     _(ensures !\result ==> \wrapped(state))
     _(ensures \result <= 0)    
     ;
 
 int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
 {
-    GUARD(s2n_hmac_digest(state, (uint8_t *)outt, size));
+    GUARD(s2n_hmac_digest(state, outt, size));
 
     /* If there were 9 or more bytes of space left in the current hash block
      * then the serialized length, plus an 0x80 byte, will have fit in that block. 
@@ -325,14 +330,14 @@ extern int s2n_constant_time_equals(const uint8_t *a, const uint8_t *b, uint32_t
     _(requires \thread_local_array((uint8_t *)a,len))
     _(requires \thread_local_array((uint8_t *)b,len))
     _(ensures (\forall uint8_t i; i<len ==> ((uint8_t *)(a))[i]==((uint8_t *)(b))[i]) ==> \result == 1)
-    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result ==> 0)
+    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result == 0)
 ;
 
 extern int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
     _(requires \thread_local_array((uint8_t *)a,len))
     _(requires \thread_local_array((uint8_t *)b,len))
     _(ensures (\forall uint8_t i; i<len ==> ((uint8_t *)(a))[i]== ((uint8_t *)(b))[i]) ==> \result == 0)
-    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result ==> -1)
+    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result == -1)
 ;
 
 int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
