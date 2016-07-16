@@ -1,387 +1,381 @@
-
-/*
- * Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License").
- * You may not use this file except in compliance with the License.
- * A copy of the License is located at
- *
- *  http://aws.amazon.com/apache2.0
- *
- * or in the "license" file accompanying this file. This file is distributed
- * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language governing
- * permissions and limitations under the License.
- */
-
-#pragma once
-
-#include <stdint.h>
 #include <vcc.h>
-#include "s2n_hash.h"
-#include <string.h>
+#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-
-#define SYSTEM_PAGE_SIZE() 394857
-
-#define GUARD( x )      if ( (x) < 0 ) return -1
-#define GUARD_PTR( x )  if ( (x) < 0 ) return NULL
+#include <string.h>
 
 #define notnull_check( ptr )    do { if ( (ptr) == NULL ) { return -1; } }                          while(0)
 #define memcpy_check( d, s, n ) do { if ( (n) ) { notnull_check( (d) ); memcpy( (d), (s), (n)); } } while(0)
 #define memset_check( d, c, n ) do { if ( (n) ) { notnull_check( (d) ); memset( (d), (c), (n)); } } while(0)
 
-#define gte_check(n, min)  do { if ( (n) < min ) { return -1; /*S2N_ERROR(S2N_ERR_SAFETY);*/ } } while(0)
-#define lte_check(n, max)  do { if ( (n) > max ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define gt_check(n, min)  do { if ( (n) <= min ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define lt_check(n, max)  do { if ( (n) >= max ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define eq_check(a, b)  do { if ( (a) != (b) ) { return -1;/*S2N_ERROR(S2N_ERR_SAFETY);*/ } } while(0)
-#define ne_check(a, b)  do { if ( (a) == (b) ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define inclusive_range_check( low, n, high )  gte_check(n, low); lte_check(n, high)
-#define exclusive_range_check( low, n, high )  gt_check(n, low); lt_check(n, high)
+#if defined(__LP32__)
+    #define MD5_LONG unsigned long
+#elif defined(OPENSSL_SYS_CRAY) || defined(__ILP64__)
+    #define MD5_LONG unsigned long
+    #define MD5_LONG_LOG2 3
+#else
+    #define MD5_LONG unsigned int
+#endif
 
-#define wrap_state(s) \
-    _(union_reinterpret &s->hash_ctx.sha1) \
-    s->alg = S2N_HASH_SHA1; \
-    _(wrap &s->hash_ctx) \
-    _(wrap &s->hash_ctx.sha1) \
-    _(ghost s->\owns = {&s->hash_ctx.sha1, &s->hash_ctx}) \
-    _(wrap s)
+#define MD5_CBLOCK	64
+#define MD5_LBLOCK	(MD5_CBLOCK/4)
+#define MD5_DIGEST_LENGTH 16
+typedef struct MD5state_st
+	{
+	MD5_LONG A,B,C,D;
+	MD5_LONG Nl,Nh;
+	MD5_LONG data[MD5_LBLOCK];
+	unsigned int num;
+	} MD5_CTX;
 
-typedef enum { S2N_HMAC_NONE, S2N_HMAC_MD5, S2N_HMAC_SHA1, S2N_HMAC_SHA224, S2N_HMAC_SHA256, S2N_HMAC_SHA384,
-    S2N_HMAC_SHA512, S2N_HMAC_SSLv3_MD5, S2N_HMAC_SSLv3_SHA1
-} s2n_hmac_algorithm;
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(__MINGW32__)
+    #if defined(__LP32__)
+        #define SHA_LONG unsigned long
+    #elif defined(OPENSSL_SYS_CRAY) || defined(__ILP64__)
+        #define SHA_LONG unsigned long
+        #define SHA_LONG_LOG2 3
+    #else
+        #define SHA_LONG unsigned int
+    #endif
+    #define SHA_LBLOCK	16
+    #define SHA_DIGEST_LENGTH 20
+    #define SHA224_DIGEST_LENGTH	28
+    #define SHA256_DIGEST_LENGTH	32
+    #define SHA384_DIGEST_LENGTH	48
+    #define SHA512_DIGEST_LENGTH	64
+    typedef struct SHAstate_st
+	    {
+	    SHA_LONG h0,h1,h2,h3,h4;
+	    SHA_LONG Nl,Nh;
+	    SHA_LONG data[SHA_LBLOCK];
+	    unsigned int num;
+	    } SHA_CTX;
+    typedef struct SHA256state_st
+	    {
+	    SHA_LONG h[8];
+	    SHA_LONG Nl,Nh;
+	    SHA_LONG data[SHA_LBLOCK];
+	    unsigned int num,md_len;
+	    } SHA256_CTX;
+#endif
 
-struct s2n_hmac_state {
-    s2n_hmac_algorithm alg;
+#ifndef OPENSSL_NO_SHA512
+/*
+ * Unlike 32-bit digest algorithms, SHA-512 *relies* on SHA_LONG64
+ * being exactly 64-bit wide. See Implementation Notes in sha512.c
+ * for further details.
+ */
+    #define SHA512_CBLOCK	(SHA_LBLOCK*8)	/* SHA-512 treats input data as a
+					                        * contiguous array of 64 bit
+					                        * wide big-endian values. */
+    #if (defined(_WIN32) || defined(_WIN64)) && !defined(__MINGW32__)
+        #define SHA_LONG64 unsigned __int64
+        #define U64(C)     C##UI64
+    #elif defined(__arch64__)
+        #define SHA_LONG64 unsigned long
+        #define U64(C)     C##UL
+    #else
+        #define SHA_LONG64 unsigned long long
+        #define U64(C)     C##ULL
+    #endif
+    typedef struct SHA512state_st
+	    {
+	    SHA_LONG64 h[8];
+	    SHA_LONG64 Nl,Nh;
+	    union {
+            struct{SHA_LONG64	d[SHA_LBLOCK];}d;
+            struct{unsigned char	p[SHA512_CBLOCK];}p;
+	    } u;
+	    unsigned int num,md_len;
+	    } SHA512_CTX;
+#endif
 
-    uint16_t hash_block_size;
-    uint32_t currently_in_hash_block;
-    uint16_t block_size;
-    uint8_t digest_size;
+int MD5_Init(MD5_CTX *c);
+int SHA1_Init(SHA_CTX *c)
+    _(requires \mutable(c))
+    _(writes c)
+    _(ensures \wrapped(c))
+    _(ensures \result == 1)
+;
 
-    struct s2n_hash_state inner;
-    struct s2n_hash_state inner_just_key;
-    struct s2n_hash_state outer;
+int SHA224_Init(SHA256_CTX *c);
+int SHA256_Init(SHA256_CTX *c);
+int SHA384_Init(SHA512_CTX *c);
+int SHA512_Init(SHA512_CTX *c);
 
-    /* key needs to be as large as the biggest block size */
-    uint8_t xor_pad[128];
+int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
+    _(requires \wrapped(c))
+    _(requires \thread_local_array((uint8_t *)data,len))
+    _(writes c)
+    _(ensures \wrapped(c))
+    _(ensures \result == 1)
+;
 
-    /* For storing the inner digest */
-    uint8_t digest_pad[SHA512_DIGEST_LENGTH];
+int SHA1_Final(void *md, SHA_CTX *c)
+    _(requires \wrapped(c) && \thread_local(md))
+    _(writes md, c)
+    _(ensures \wrapped(c))
+    _(ensures \result == 1)
+;
 
-    _(invariant alg == S2N_HMAC_SHA1)
-    _(invariant (&inner)->alg == S2N_HASH_SHA1)
-    _(invariant (&inner_just_key)->alg == S2N_HASH_SHA1)
-    _(invariant (&outer)->alg == S2N_HASH_SHA1)
-    _(invariant \mine(&inner) && \mine(&outer) && \mine(&inner_just_key))
-    _(invariant (&outer)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
-    _(invariant (&inner)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
-    _(invariant (&inner_just_key)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
-    _(invariant hash_block_size >= 9)
-    _(invariant block_size != 0)
+#define eq_check(a, b)  do { if ( (a) != (b) ) {/* S2N_ERROR(S2N_ERR_SAFETY)*/ return -1; } } while(0)
+
+typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_HASH_SHA256, S2N_HASH_SHA384,
+    S2N_HASH_SHA512, S2N_HASH_MD5_SHA1
+} s2n_hash_algorithm; 
+
+typedef _(dynamic_owns) struct s2n_hash_state {
+    s2n_hash_algorithm alg;
+    union {
+        MD5_CTX md5;
+        SHA_CTX sha1;
+        SHA256_CTX sha224;
+        SHA256_CTX sha256;
+        SHA512_CTX sha384;
+        SHA512_CTX sha512;
+        struct {
+            MD5_CTX md5;
+            SHA_CTX sha1;
+        } md5_sha1;
+    } hash_ctx;
+    _(invariant \mine(&hash_ctx.sha1))
+    _(invariant alg == S2N_HASH_SHA1)
+    _(invariant alg == S2N_HASH_MD5 ==> \union_active(&hash_ctx.md5) && \mine(&hash_ctx.md5))
+    _(invariant alg == S2N_HASH_SHA1 ==> \union_active(&hash_ctx.sha1) && \mine(&hash_ctx.sha1))
+    _(invariant alg == S2N_HASH_SHA224 ==> \union_active(&hash_ctx.sha224) && \mine(&hash_ctx.sha224))
+    _(invariant alg == S2N_HASH_SHA256 ==> \union_active(&hash_ctx.sha256) && \mine(&hash_ctx.sha256))
+    _(invariant alg == S2N_HASH_SHA384 ==> \union_active(&hash_ctx.sha384) && \mine(&hash_ctx.sha384))
+    _(invariant alg == S2N_HASH_SHA512 ==> \union_active(&hash_ctx.sha512) && \mine(&hash_ctx.sha512))
+    _(invariant alg == S2N_HASH_MD5_SHA1 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1))
+    _(invariant \mine(&hash_ctx))
 };
 
-extern int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
-    _(requires alg >= 0 && alg <= 8)
-    _(requires alg == S2N_HMAC_SHA1)
+extern int s2n_hash_digest_size(s2n_hash_algorithm alg)
+    _(requires 0 <= alg && alg <= 7)
+    _(ensures alg == S2N_HASH_NONE ==> \result == 0)
+    _(ensures alg == S2N_HASH_MD5 ==> \result == MD5_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA1 ==> \result == SHA_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA224 ==> \result == SHA224_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA256 ==> \result == SHA256_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA384 ==> \result == SHA384_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_SHA512 ==> \result == SHA512_DIGEST_LENGTH)
+    _(ensures alg == S2N_HASH_MD5_SHA1 ==> \result == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
 ;
 
-int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
+int s2n_hash_digest_size(s2n_hash_algorithm alg)
 {
-    if (alg == S2N_HMAC_SSLv3_MD5) {
-        alg = S2N_HMAC_MD5;
-    }
-    if (alg == S2N_HMAC_SSLv3_SHA1) {
-        alg = S2N_HMAC_SHA1;
-    }
+    int sizes[] = { 0, MD5_DIGEST_LENGTH, SHA_DIGEST_LENGTH, SHA224_DIGEST_LENGTH, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH, MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH };
 
-    return s2n_hash_digest_size((s2n_hash_algorithm) alg);
+    return sizes[alg];
 }
 
-extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const void *key, uint32_t klen)
+extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
+    _(requires alg == S2N_HASH_SHA1)
     _(requires \extent_mutable(state))
-    _(requires \wrapped(\domain_root(\embedding((uint8_t *)key))))
-    _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
-    _(requires \thread_local_array((uint8_t *)key,klen))
-    _(requires alg == S2N_HMAC_SHA1)
     _(writes \extent(state))
     _(ensures \result <= 0)
-    _(ensures !\result ==> \wrapped(state))
+    _(ensures state->alg == alg)
+    _(ensures \wrapped(state))
+    _(ensures \fresh(&state->hash_ctx.sha1) && \fresh(&state->hash_ctx))
 ;
 
-int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const void *key, uint32_t klen)
+int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
 {
-    s2n_hash_algorithm hash_alg = S2N_HASH_NONE;
-    state->currently_in_hash_block = 0;
-    state->digest_size = 0;
-    state->block_size = 64;
-    state->hash_block_size = 64; 
-    
+    int r;
     switch (alg) {
-    case S2N_HMAC_NONE:
+    case S2N_HASH_NONE:
+        r = 1;
         break;
-    case S2N_HMAC_SSLv3_MD5:
-        state->block_size = 48;
-         //Fall through ... 
-        break; //USER ADDED
-    case S2N_HMAC_MD5:
-        state->block_size = 48; //USER ADDED
-        hash_alg = S2N_HASH_MD5;
-        state->digest_size = MD5_DIGEST_LENGTH;
+    case S2N_HASH_MD5:
+        r = MD5_Init(&state->hash_ctx.md5);
         break;
-    case S2N_HMAC_SSLv3_SHA1:
-        state->block_size = 40;
-        // Fall through ... */
-        break; //USER ADDED
-    case S2N_HMAC_SHA1:
-        hash_alg = S2N_HASH_SHA1;
-        state->block_size = 40; //user-added 
-        state->digest_size = SHA_DIGEST_LENGTH;
+    case S2N_HASH_SHA1:
+        _(union_reinterpret &state->hash_ctx.sha1)
+        r = SHA1_Init(&state->hash_ctx.sha1);
         break;
-    case S2N_HMAC_SHA224:
-        hash_alg = S2N_HASH_SHA224;
-        state->digest_size = SHA224_DIGEST_LENGTH;
+    case S2N_HASH_SHA224:
+        r = SHA224_Init(&state->hash_ctx.sha224);
         break;
-    case S2N_HMAC_SHA256:
-        hash_alg = S2N_HASH_SHA256;
-        state->digest_size = SHA256_DIGEST_LENGTH;
+    case S2N_HASH_SHA256:
+        r = SHA256_Init(&state->hash_ctx.sha256);
         break;
-    case S2N_HMAC_SHA384:
-        hash_alg = S2N_HASH_SHA384;
-        state->digest_size = SHA384_DIGEST_LENGTH;
-        state->block_size = 128;
-        state->hash_block_size = 128;
+    case S2N_HASH_SHA384:
+        r = SHA384_Init(&state->hash_ctx.sha384);
         break;
-    case S2N_HMAC_SHA512:
-        hash_alg = S2N_HASH_SHA512;
-        state->digest_size = SHA512_DIGEST_LENGTH;
-        state->block_size = 128;
-        state->hash_block_size = 128;
+    case S2N_HASH_SHA512:
+        r = SHA512_Init(&state->hash_ctx.sha512);
         break;
+    case S2N_HASH_MD5_SHA1:
+        r = SHA1_Init(&state->hash_ctx.md5_sha1.sha1);
+        r &= MD5_Init(&state->hash_ctx.md5_sha1.md5);
+        break;
+
     default:
-        //S2N_ERROR(S2N_ERR_HMAC_INVALID_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
         return -1;
     }
-    _(assert sizeof(state->xor_pad) >= state->block_size)
-    _(assert sizeof(state->digest_pad) >= state->digest_size)
-/*
-    gte_check(sizeof(state->xor_pad), state->block_size);
-    gte_check(sizeof(state->digest_pad), state->digest_size);*/
+
+    /*if (r == 0) {
+        //S2N_ERROR(S2N_ERR_HASH_INIT_FAILED);
+        return -1;
+    }*/
     
     state->alg = alg;
-    
-    /*if (alg == S2N_HMAC_SSLv3_SHA1 || alg == S2N_HMAC_SSLv3_MD5) {
-        //return s2n_sslv3_mac_init(state, alg, key, klen);
-    }*/
-
-    GUARD(s2n_hash_init(&state->inner_just_key, hash_alg));
-    GUARD(s2n_hash_init(&state->outer, hash_alg));
-    
-    uint32_t copied = klen;
-    
-    if (klen > state->block_size) {
-        GUARD(s2n_hash_update(&state->outer, key, klen));
-        GUARD(s2n_hash_digest(&state->outer, state->digest_pad, state->digest_size)); 
-
-        memcpy_check(state->xor_pad, state->digest_pad, state->digest_size);
-        copied = state->digest_size;
-    } else {
-        memcpy_check(state->xor_pad, key, klen);
+    if(alg==S2N_HASH_SHA1) {
+        _(wrap &state->hash_ctx)
+        _(ghost state->\owns = {&state->hash_ctx.sha1, &state->hash_ctx})
+        _(wrap state);
     }
-    for (int i = 0; i < (int) copied; i++) 
-        _(writes \array_range(state->xor_pad,copied)){
-        state->xor_pad[i] ^= 0x36;
-    }
-    state->xor_pad[0] = 0x36;
-    _(assert state->block_size <= 128)
-    _(assert copied <= state->block_size)
-    _(assert 0<= copied)
-    for (int i = (int) copied; i < state->block_size; i++) 
-        _(writes \array_range(state->xor_pad,state->block_size))
-        _(invariant i>=0){
-        state->xor_pad[i] = 0x36;
-    }
-    GUARD(s2n_hash_update(&state->inner_just_key, state->xor_pad, state->block_size));
-    
-    // 0x36 xor 0x5c == 0x6a 
-    for (int i = 0; i < state->block_size; i++) 
-    _(writes \array_range(state->xor_pad,state->block_size)){
-        state->xor_pad[i] ^= 0x6a;
-    }
-    wrap_state((&state->inner))
-    _(ghost state->\owns = {&state->inner, &state->outer, &state->inner_just_key})
-    _(wrap state)
-    return s2n_hmac_reset(state);
+    return 0;
 }
 
-extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
+extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
     _(requires \wrapped(state))
-    _(requires \thread_local_array((uint8_t *)in,size))
-    _(requires state->currently_in_hash_block + (4294949760 + size) % state->hash_block_size <= _UI32_MAX - SYSTEM_PAGE_SIZE())
-    _(writes state)
-    _(ensures !\result ==> \wrapped(state))
-    _(ensures \result <= 0);
-
-int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
-{
-    /* Keep track of how much of the current hash block is full
-     *
-     * Why the 4294949760 constant in this code? 4294949760 is the highest 32-bit
-     * value that is congruent to 0 modulo all of our HMAC block sizes, that is also
-     * at least 16k smaller than 2^32. It therefore has no effect on the mathematical
-     * result, and no valid record size can cause it to overflow.
-     * 
-     * The value was found with the following python code;
-     * 
-     * x = (2 ** 32) - (2 ** 14)
-     * while True:
-     *   if x % 40 | x % 48 | x % 64 | x % 128 == 0:
-     *     break
-     *   x -= 1
-     * print x
-     *
-     * What it does do however is ensure that the mod operation takes a
-     * constant number of instruction cycles, regardless of the size of the
-     * input. On some platforms, including Intel, the operation can take a
-     * smaller number of cycles if the input is "small".
-     */
-    _(unwrap state)
-    state->currently_in_hash_block += _(unchecked) (4294949760 + size) % state->hash_block_size;
-    state->currently_in_hash_block %= state->block_size;
-    { 
-        int res = s2n_hash_update(&state->inner, in, size);
-        _(wrap state) 
-        return res; 
-    }
-}
-
-extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
-    _(requires \wrapped(state))
-    _(requires \thread_local_array((uint8_t *)outt, size))
-    _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
-    _(requires \thread_local_array((uint8_t *)state->xor_pad, state->block_size))
-    _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
-    _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
-    _(requires size == SHA_DIGEST_LENGTH)
-    _(writes state, outt)
-    _(ensures !\result ==> \wrapped(state))
-    _(ensures \unchanged(state->hash_block_size))
-    _(ensures \result <= 0);
-
-int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
-{
-    /*if (state->alg == S2N_HMAC_SSLv3_SHA1 || state->alg == S2N_HMAC_SSLv3_MD5) {
-        //return s2n_sslv3_mac_digest(state, out, size);
-    }*/
-    _(unwrap state)     
-    GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
-    GUARD(s2n_hash_reset(&state->outer));
-    GUARD(s2n_hash_update(&state->outer, state->xor_pad, state->block_size));
-    GUARD(s2n_hash_update(&state->outer, state->digest_pad, state->digest_size));
-
-    { 
-        int res = s2n_hash_digest(&state->outer,outt, size);
-        _(wrap state)
-        return res; 
-    }
-}
-
-extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
-    _(requires \wrapped(state))
-    _(requires \thread_local_array((uint8_t *)outt, size))
-    _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
-    _(requires \thread_local_array((uint8_t *)state->xor_pad, state->block_size))
-    _(requires \thread_local_array((uint8_t *)state->xor_pad, state->hash_block_size))
-    _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
-    _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
-    _(requires state->alg == S2N_HMAC_SHA1 ==> size == SHA_DIGEST_LENGTH)
-    _(writes state, outt)
-    _(ensures !\result ==> \wrapped(state))
-    _(ensures \result <= 0)    
-    ;
-
-int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
-{
-    GUARD(s2n_hmac_digest(state, outt, size));
-
-    /* If there were 9 or more bytes of space left in the current hash block
-     * then the serialized length, plus an 0x80 byte, will have fit in that block. 
-     * If there were fewer than 9 then adding the length will have caused an extra 
-     * compression block round. This digest function always does two compression rounds,
-     * even if there is no need for the second.
-     */
-    if (state->currently_in_hash_block > (state->hash_block_size - 9))
-    {
-        return 0;
-    }
-
-    _(unwrap state)
-    
-    { 
-        int res = s2n_hash_update(&state->inner, state->xor_pad, state->hash_block_size);
-        _(wrap state) 
-        return res; 
-    }
-}
-
-extern int s2n_constant_time_equals(const uint8_t *a, const uint8_t *b, uint32_t len)
-    _(requires \thread_local_array((uint8_t *)a,len))
-    _(requires \thread_local_array((uint8_t *)b,len))
-    _(ensures (\forall uint8_t i; i<len ==> ((uint8_t *)(a))[i]==((uint8_t *)(b))[i]) ==> \result == 1)
-    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result == 0)
-;
-
-extern int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
-    _(requires \thread_local_array((uint8_t *)a,len))
-    _(requires \thread_local_array((uint8_t *)b,len))
-    _(ensures (\forall uint8_t i; i<len ==> ((uint8_t *)(a))[i]== ((uint8_t *)(b))[i]) ==> \result == 0)
-    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result == -1)
-;
-
-int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
-{
-    return 0 - !s2n_constant_time_equals((uint8_t *)a, (uint8_t *)b, len);
-}
-
-
-extern int s2n_hmac_reset(struct s2n_hmac_state *state)
-    _(maintains \wrapped(state))
+    _(requires \thread_local_array((uint8_t *) in,size))
+    _(requires !((uint8_t *)in \in \domain(&state->hash_ctx.sha1)))
     _(writes state)
     _(ensures \result == 0)
+    _(ensures \unchanged(state->alg))
+    _(ensures \wrapped(state))
 ;
 
-int s2n_hmac_reset(struct s2n_hmac_state *state)
+int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t size)
 {
+    int r;
     _(unwrap state)
-    state->currently_in_hash_block = 0;
-    _(unwrap (&state->inner))
-    memcpy_check(&state->inner, &state->inner_just_key, sizeof(state->inner));
-    _(wrap (&state->inner))
+    switch (state->alg) {
+    case S2N_HASH_NONE:
+        r = 1;
+        break;
+    case S2N_HASH_MD5:
+        //r = MD5_Update(&state->hash_ctx.md5, data, size);
+        break;
+    case S2N_HASH_SHA1:
+        r = SHA1_Update(&state->hash_ctx.sha1, data, size);
+        break;
+    case S2N_HASH_SHA224:
+        //r = SHA224_Update(&state->hash_ctx.sha224, data, size);
+        break;
+    case S2N_HASH_SHA256:
+        //r = SHA256_Update(&state->hash_ctx.sha256, data, size);
+        break;
+    case S2N_HASH_SHA384:
+        //r = SHA384_Update(&state->hash_ctx.sha384, data, size);
+        break;
+    case S2N_HASH_SHA512:
+        //r = SHA512_Update(&state->hash_ctx.sha512, data, size);
+        break;
+    case S2N_HASH_MD5_SHA1:
+        //r = SHA1_Update(&state->hash_ctx.md5_sha1.sha1, data, size);
+        //r &= MD5_Update(&state->hash_ctx.md5_sha1.md5, data, size);
+        break;
+    default:
+        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        return -1;
+    }
+
+    /*if (r == 0) {
+        //S2N_ERROR(S2N_ERR_HASH_UPDATE_FAILED);
+        return -1;
+    }*/
     _(wrap state)
     return 0;
 }
 
-extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
-    _(requires \wrapped(from))
+extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
+    _(requires \wrapped(state) && \thread_local_array((uint8_t *)outt,size))
+    _(requires state->alg == S2N_HASH_SHA1 ==> size == SHA_DIGEST_LENGTH)
+    _(writes state, outt)
+    _(ensures \unchanged(state->alg))
+    _(ensures \result <= 0)
+    _(ensures \wrapped(state))
+;
+
+int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
+{
+    int r;
+    _(assert state->alg == S2N_HASH_SHA1)
+    _(unwrap state)
+    switch (state->alg) {
+    case S2N_HASH_NONE:
+        r = 1;
+        break;
+    case S2N_HASH_MD5:
+        //eq_check(size, MD5_DIGEST_LENGTH);
+        //r = MD5_Final(out, &state->hash_ctx.md5);
+        break;
+    case S2N_HASH_SHA1:
+        //eq_check(size, SHA_DIGEST_LENGTH);
+        _(unwrap &state->hash_ctx)
+        r = SHA1_Final(outt, &state->hash_ctx.sha1);
+        break;
+    case S2N_HASH_SHA224:
+        //eq_check(size, SHA224_DIGEST_LENGTH);
+        //r = SHA224_Final(out, &state->hash_ctx.sha224);
+        break;
+    case S2N_HASH_SHA256:
+        //eq_check(size, SHA256_DIGEST_LENGTH);
+        //r = SHA256_Final(out, &state->hash_ctx.sha256);
+        break;
+    case S2N_HASH_SHA384:
+        //eq_check(size, SHA384_DIGEST_LENGTH);
+        //r = SHA384_Final(out, &state->hash_ctx.sha384);
+        break;
+    case S2N_HASH_SHA512:
+        //eq_check(size, SHA512_DIGEST_LENGTH);
+        //r = SHA512_Final(out, &state->hash_ctx.sha512);
+        break;
+    case S2N_HASH_MD5_SHA1:
+        //eq_check(size, MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH);
+        //r = SHA1_Final(((uint8_t *) out) + MD5_DIGEST_LENGTH, &state->hash_ctx.md5_sha1.sha1);
+        //r &= MD5_Final(out, &state->hash_ctx.md5_sha1.md5);
+        break;
+    default:
+        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        return -1;
+    }
+
+    if (r == 0) {
+        //S2N_ERROR(S2N_ERR_HASH_DIGEST_FAILED);
+        return -1;
+    }
+    _(wrap &state->hash_ctx)
+    _(wrap state)
+    return 0;
+}
+
+extern int s2n_hash_reset(struct s2n_hash_state *state)
+    _(requires \wrapped(state))
+    _(writes state)
+    _(ensures \wrapped(state))
+    _(ensures \result <= 0)
+    _(ensures \unchanged(state->alg))
+;
+
+int s2n_hash_reset(struct s2n_hash_state *state)
+{
+    _(unwrap state)
+    _(unwrap &state->hash_ctx)
+    _(unwrap &state->hash_ctx.sha1)
+    return s2n_hash_init(state, state->alg);
+}
+
+extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(requires \extent_mutable(to))
+    _(requires to->alg == S2N_HASH_SHA1)
+    _(requires \wrapped(from))
     _(requires from != to)
-    _(requires to->hash_block_size >= 9)
-    _(requires to->block_size != 0)
     _(writes \extent(to))
     _(ensures \wrapped(from) && \wrapped(to))
     _(ensures \result <= 0)
 ; 
 
-int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
+int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
 {
-    memcpy_check(to, from, sizeof(struct s2n_hmac_state));
-    wrap_state((&to->inner_just_key));
-    wrap_state((&to->inner));
-    wrap_state((&to->outer));
-    to->alg = S2N_HMAC_SHA1;
-    to->digest_size = SHA_DIGEST_LENGTH;
+    memcpy_check(to, from, sizeof(struct s2n_hash_state));
+    _(union_reinterpret &to->hash_ctx.sha1)
+    _(wrap &to->hash_ctx)
+    _(wrap &to->hash_ctx.sha1)
+    _(ghost to->\owns = {&to->hash_ctx.sha1, &to->hash_ctx})
     _(wrap to)
     return 0;
 }
