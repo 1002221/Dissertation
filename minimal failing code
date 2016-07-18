@@ -55,7 +55,7 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
     _(requires \wrapped(state) && \thread_local_array((uint8_t *)outt,size))
     _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
     _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
-    _(requires size == 36)
+    _(requires size == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
     _(writes state, \array_range(outt,size))
     _(ensures \result <= 0)
     _(ensures \wrapped(state))
@@ -67,14 +67,10 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     _(unwrap state)
     switch (state->alg) {
     case S2N_HASH_MD5_SHA1:
-        //eq_check(size, MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH);
         _(assert size == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
  
         r = SHA1_Final2(((uint8_t *) outt) + MD5_DIGEST_LENGTH, &state->hash_ctx.md5_sha1.sha1);
         break;
-    default:
-        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
-        _(assert 0)
     }
     _(wrap state)
     return 0;
