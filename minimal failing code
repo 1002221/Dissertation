@@ -7,6 +7,7 @@
 #define MD5_LBLOCK	(MD5_CBLOCK/4)
 #define MD5_DIGEST_LENGTH 16
 
+
 typedef struct MD5state_st2
 	{
 	MD5_LONG A,B,C,D;
@@ -18,6 +19,14 @@ typedef struct MD5state_st2
 #define SHA_LONG unsigned int
 #define SHA_LBLOCK	16
 #define SHA_DIGEST_LENGTH 20
+
+typedef struct SHAstate_st
+	    {
+	    SHA_LONG h0,h1,h2,h3,h4;
+	    SHA_LONG Nl,Nh;
+	    SHA_LONG data[SHA_LBLOCK];
+	    unsigned int num;
+	    } SHA_CTX;
 
 typedef struct SHAstate_st2
 	    {
@@ -41,6 +50,7 @@ typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_
 typedef _(dynamic_owns) struct s2n_hash_state {
     s2n_hash_algorithm alg;
     union {
+        SHA_CTX sha1;
         struct {
             SHA_CTX2 sha1;
             MD5_CTX2 md5;
@@ -55,7 +65,7 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
     _(requires \wrapped(state) && \thread_local_array((uint8_t *)outt,size))
     _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
     _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
-    _(requires size == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
+    _(requires size == 36)
     _(writes state, \array_range(outt,size))
     _(ensures \result <= 0)
     _(ensures \wrapped(state))
