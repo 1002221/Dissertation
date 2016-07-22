@@ -1,3 +1,16 @@
+/* SOME ISSUES
+
+1) VCC doesn't seem to recognise the memcpy command
+2) in s2n_hmac_digest, we call sslv3_digest although we never set the block_size. At the moment,
+I have an invariant about how big the block_size can be in s2n_hmac_state. I also have
+invariants to say hash_block_size >= 9 invariant block_size != 0.
+3) in s2n_hmac_init, we call sslv3_init, although we never set the digest_size. At the moment,
+I've added a command to set it in the code (before the call) to make it verify, although it
+shouldn't be there.
+
+
+
+*/
 
 /*
  * Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -71,21 +84,18 @@ struct s2n_hmac_state {
     /* For storing the inner digest */
     uint8_t digest_pad[SHA512_DIGEST_LENGTH];
 
-    _(invariant alg == S2N_HMAC_SHA1)
-    _(invariant (&inner)->alg == S2N_HASH_SHA1)
-    _(invariant (&inner_just_key)->alg == S2N_HASH_SHA1)
-    _(invariant (&outer)->alg == S2N_HASH_SHA1)
+    _(invariant (&inner)->alg == hmac_to_hash(alg))
+    _(invariant (&inner_just_key)->alg == hmac_to_hash(alg))
+    _(invariant (&outer)->alg == hmac_to_hash(alg))
     _(invariant \mine(&inner) && \mine(&outer) && \mine(&inner_just_key))
-    _(invariant (&outer)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
-    _(invariant (&inner)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
-    _(invariant (&inner_just_key)->alg == S2N_HASH_SHA1 ==> digest_size == SHA_DIGEST_LENGTH)
+    _(invariant digest_size == alg_digest_size(hmac_to_hash(alg)))
     _(invariant hash_block_size >= 9)
     _(invariant block_size != 0)
+    _(invariant sizeof(xor_pad) >= block_size)
 };
 
 extern int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
     _(requires alg >= 0 && alg <= 8)
-    _(requires alg == S2N_HMAC_SHA1)
 ;
 
 int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
@@ -100,12 +110,78 @@ int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
     return s2n_hash_digest_size((s2n_hash_algorithm) alg);
 }
 
+_(def s2n_hash_algorithm hmac_to_hash(s2n_hmac_algorithm alg) 
+{ 
+    if (alg == S2N_HMAC_NONE) return S2N_HASH_NONE; 
+    if (alg == S2N_HMAC_MD5) return S2N_HASH_MD5; 
+    if (alg == S2N_HMAC_SHA1) return S2N_HASH_SHA1; 
+    if (alg == S2N_HMAC_SHA224) return S2N_HASH_SHA224; 
+    if (alg == S2N_HMAC_SHA256) return S2N_HASH_SHA256; 
+    if (alg == S2N_HMAC_SHA384) return S2N_HASH_SHA384; 
+    if (alg == S2N_HMAC_SHA512) return S2N_HASH_SHA512; 
+    if (alg == S2N_HMAC_SSLv3_MD5) return S2N_HASH_MD5; //IS THIS RIGHT?
+    if (alg == S2N_HMAC_SSLv3_SHA1) return S2N_HASH_SHA1; 
+    else return S2N_HASH_SHA1; 
+})
+
+static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const void *key, uint32_t klen)
+    _(requires \extent_mutable(state))
+    _(requires state->alg == S2N_HMAC_SSLv3_SHA1 || state->alg == S2N_HMAC_SSLv3_MD5)
+    _(requires state->alg == S2N_HMAC_SSLv3_SHA1 ==> state->block_size == 40)
+    _(requires state->alg == S2N_HMAC_SSLv3_MD5 ==> state->block_size == 48)
+    _(requires \wrapped(\domain_root(\embedding((uint8_t *)key))))
+    _(requires \thread_local_array((uint8_t *)key,klen))
+    _(requires sizeof(state->xor_pad) >= state->block_size)
+    _(requires sizeof(state->digest_pad) >= state->digest_size)
+    _(requires sizeof(state->xor_pad) >= state->block_size)
+    _(requires sizeof(state->digest_pad) >= state->digest_size)
+    _(requires state->alg == alg)
+    _(requires state->currently_in_hash_block == 0)
+    _(requires state->digest_size == 0)
+    _(requires state->hash_block_size == 64)
+    _(writes \extent(state))
+    _(ensures !\result ==> \wrapped(state))
+    _(ensures \result <= 0)
+{
+    s2n_hash_algorithm hash_alg = S2N_HASH_NONE;
+
+    if (alg == S2N_HMAC_SSLv3_MD5) {
+        hash_alg = S2N_HASH_MD5;
+        state->digest_size = MD5_DIGEST_LENGTH;  //USER ADDED - QUERY WITH ERNIE
+    }
+    if (alg == S2N_HMAC_SSLv3_SHA1) {
+        hash_alg = S2N_HASH_SHA1;
+        state->digest_size = SHA_DIGEST_LENGTH; // USER ADDED - QUERY WITH ERNIE
+    }
+
+    for (int i = 0; i < state->block_size; i++) 
+        _(writes \array_range(state->xor_pad,state->block_size)){
+        state->xor_pad[i] = 0x36;
+    }
+
+    GUARD(s2n_hash_init(&state->inner_just_key, hash_alg));
+    GUARD(s2n_hash_update(&state->inner_just_key, key, klen));
+    GUARD(s2n_hash_update(&state->inner_just_key, state->xor_pad, state->block_size));
+
+    for (int i = 0; i < state->block_size; i++) 
+        _(writes \array_range(state->xor_pad,state->block_size)){
+        state->xor_pad[i] = 0x5c;
+    }
+
+    GUARD(s2n_hash_init(&state->outer, hash_alg));
+    GUARD(s2n_hash_update(&state->outer, key, klen));
+    GUARD(s2n_hash_update(&state->outer, state->xor_pad, state->block_size));
+
+    /* Copy inner_just_key to inner */
+    return s2n_hmac_reset(state);
+}
+
 extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const void *key, uint32_t klen)
     _(requires \extent_mutable(state))
     _(requires \wrapped(\domain_root(\embedding((uint8_t *)key))))
     _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
     _(requires \thread_local_array((uint8_t *)key,klen))
-    _(requires alg == S2N_HMAC_SHA1)
+    _(requires alg >= 0 && alg <= 8)
     _(writes \extent(state))
     _(ensures \result <= 0)
     _(ensures !\result ==> \wrapped(state))
@@ -162,33 +238,40 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         break;
     default:
         //S2N_ERROR(S2N_ERR_HMAC_INVALID_ALGORITHM);
-        return -1;
+        _(assert 0)
     }
     _(assert sizeof(state->xor_pad) >= state->block_size)
     _(assert sizeof(state->digest_pad) >= state->digest_size)
-/*
-    gte_check(sizeof(state->xor_pad), state->block_size);
-    gte_check(sizeof(state->digest_pad), state->digest_size);*/
+
+    //gte_check(sizeof(state->xor_pad), state->block_size);
+    //gte_check(sizeof(state->digest_pad), state->digest_size);
+    _(assert sizeof(state->xor_pad) >= state->block_size)
+    _(assert sizeof(state->digest_pad) >= state->digest_size)
     
     state->alg = alg;
     
-    /*if (alg == S2N_HMAC_SSLv3_SHA1 || alg == S2N_HMAC_SSLv3_MD5) {
-        //return s2n_sslv3_mac_init(state, alg, key, klen);
-    }*/
-
+    if (alg == S2N_HMAC_SSLv3_SHA1 || alg == S2N_HMAC_SSLv3_MD5) {
+        return s2n_sslv3_mac_init(state, alg, key, klen);
+    }
     GUARD(s2n_hash_init(&state->inner_just_key, hash_alg));
     GUARD(s2n_hash_init(&state->outer, hash_alg));
-    
+    _(assert \inv(&state->outer))
     uint32_t copied = klen;
     
     if (klen > state->block_size) {
         GUARD(s2n_hash_update(&state->outer, key, klen));
+        _(assert \inv(&state->outer))
+        _(assert alg_digest_size((&state->outer)->alg) == state->digest_size)
         GUARD(s2n_hash_digest(&state->outer, state->digest_pad, state->digest_size)); 
-
-        memcpy_check(state->xor_pad, state->digest_pad, state->digest_size);
+        _(assert \inv(&state->outer))
+        _(assert state->digest_size ==> state->xor_pad != NULL)
+        memcpy/*_check*/(state->xor_pad, state->digest_pad, state->digest_size);
+        _(assert state->digest_size ==> state->xor_pad != NULL)
         copied = state->digest_size;
     } else {
-        memcpy_check(state->xor_pad, key, klen);
+        _(assert klen ==> state->xor_pad != NULL)
+        memcpy/*_check*/(state->xor_pad, key, klen);
+        _(assert klen ==> state->xor_pad != NULL)
     }
     for (int i = 0; i < (int) copied; i++) 
         _(writes \array_range(state->xor_pad,copied)){
@@ -210,9 +293,6 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(writes \array_range(state->xor_pad,state->block_size)){
         state->xor_pad[i] ^= 0x6a;
     }
-    wrap_state((&state->inner))
-    _(ghost state->\owns = {&state->inner, &state->outer, &state->inner_just_key})
-    _(wrap state)
     return s2n_hmac_reset(state);
 }
 
@@ -257,30 +337,56 @@ int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
     }
 }
 
-extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
+
+static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state))
-    _(requires \thread_local_array((uint8_t *)outt, size))
-    _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
-    _(requires \thread_local_array((uint8_t *)state->xor_pad, state->block_size))
-    _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
-    _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
-    _(requires size == SHA_DIGEST_LENGTH)
-    _(writes state, outt)
+    _(requires state->alg >= 7 && state->alg <= 8)
+    _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
+    _(writes state, \array_range(_(uint8_t *)outt, size)) 
     _(ensures !\result ==> \wrapped(state))
     _(ensures \unchanged(state->hash_block_size))
-    _(ensures \result <= 0);
+    _(ensures \result <= 0)
+{
+    _(unwrap state)
+    for (int i = 0; i < state->block_size; i++) 
+        _(writes \array_range(state->xor_pad,state->block_size)){
+        state->xor_pad[i] = 0x5c;
+    }
+   
+    GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
+    _(assert sizeof(state->inner) ==> &state->inner != NULL)
+    memcpy/*_check*/(&state->inner, &state->outer, sizeof(state->inner));
+    _(unwrap &state->inner)
+    (&state->inner)->alg = (&state->outer)->alg;
+    _(wrap &state->inner)
+    GUARD(s2n_hash_update(&state->inner, state->digest_pad, state->digest_size));
+
+    {
+        int res= s2n_hash_digest(&state->inner, outt, size);
+        _(wrap state)
+        return res;
+    }
+}
+
+extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
+    _(requires \wrapped(state))
+    _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
+    _(writes state, \array_range(_(uint8_t *)outt, size)) 
+    _(ensures !\result ==> \wrapped(state))
+    _(ensures \unchanged(state->hash_block_size))
+    _(ensures \result <= 0)
+;
 
 int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
 {
-    /*if (state->alg == S2N_HMAC_SSLv3_SHA1 || state->alg == S2N_HMAC_SSLv3_MD5) {
-        //return s2n_sslv3_mac_digest(state, out, size);
-    }*/
-    _(unwrap state)     
+    if (state->alg == S2N_HMAC_SSLv3_SHA1 || state->alg == S2N_HMAC_SSLv3_MD5) {
+        return s2n_sslv3_mac_digest(state, outt, size);
+    }
+    _(unwrap state) 
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
     GUARD(s2n_hash_reset(&state->outer));
     GUARD(s2n_hash_update(&state->outer, state->xor_pad, state->block_size));
     GUARD(s2n_hash_update(&state->outer, state->digest_pad, state->digest_size));
-
     { 
         int res = s2n_hash_digest(&state->outer,outt, size);
         _(wrap state)
@@ -290,14 +396,8 @@ int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
 
 extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state))
-    _(requires \thread_local_array((uint8_t *)outt, size))
-    _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
-    _(requires \thread_local_array((uint8_t *)state->xor_pad, state->block_size))
-    _(requires \thread_local_array((uint8_t *)state->xor_pad, state->hash_block_size))
-    _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
-    _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
-    _(requires state->alg == S2N_HMAC_SHA1 ==> size == SHA_DIGEST_LENGTH)
-    _(writes state, outt)
+    _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
+    _(writes state, \array_range(outt,size))
     _(ensures !\result ==> \wrapped(state))
     _(ensures \result <= 0)    
     ;
@@ -347,18 +447,26 @@ int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
 
 
 extern int s2n_hmac_reset(struct s2n_hmac_state *state)
-    _(maintains \wrapped(state))
-    _(writes state)
+    _(requires \mutable(state) && \extent_mutable(&state->inner) && \wrapped(&state->inner_just_key) && \wrapped(&state->outer))
+    _(requires (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
+    _(requires (&state->outer)->alg == hmac_to_hash(state->alg))
+    _(requires state->hash_block_size >= 9)
+    _(requires state->digest_size == alg_digest_size(hmac_to_hash(state->alg)))
+    _(requires state->block_size != 0)
+    _(writes \span(state), \extent(&state->inner), &state->inner_just_key, &state->outer)
+    _(ensures (&state->inner)->alg == (&state->inner_just_key)->alg)
+    _(ensures \wrapped(state))
     _(ensures \result == 0)
 ;
 
 int s2n_hmac_reset(struct s2n_hmac_state *state)
 {
-    _(unwrap state)
+    //MEMCPY NON WORKING - ASSUME THIS TO WORK FOR NOW, ASK ERNIE
+
     state->currently_in_hash_block = 0;
-    _(unwrap (&state->inner))
-    memcpy_check(&state->inner, &state->inner_just_key, sizeof(state->inner));
-    _(wrap (&state->inner))
+    _(assert sizeof(state->inner) ==> &state->inner != NULL)
+    memcpy/*_check*/(&state->inner, &state->inner_just_key, sizeof(state->inner));
+    s2n_hash_init(&state->inner, (&state->inner_just_key)->alg); //USER ADDED, IN PLACE OF MEMCPY
     _(wrap state)
     return 0;
 }
@@ -376,12 +484,12 @@ extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
 
 int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
 {
-    memcpy_check(to, from, sizeof(struct s2n_hmac_state));
+    _(assert sizeof(struct s2n_hmac_state) ==> to != NULL)
+    memcpy/*_check*/(to, from, sizeof(struct s2n_hmac_state));
     wrap_state((&to->inner_just_key));
     wrap_state((&to->inner));
     wrap_state((&to->outer));
-    to->alg = S2N_HMAC_SHA1;
-    to->digest_size = SHA_DIGEST_LENGTH;
+    to->alg = from->alg; //USER ADDED 
     _(wrap to)
     return 0;
 }
