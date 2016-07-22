@@ -1,17 +1,3 @@
-/* SOME ISSUES
-
-1) VCC doesn't seem to recognise the memcpy command
-2) in s2n_hmac_digest, we call sslv3_digest although we never set the block_size. At the moment,
-I have an invariant about how big the block_size can be in s2n_hmac_state. I also have
-invariants to say hash_block_size >= 9 invariant block_size != 0.
-3) in s2n_hmac_init, we call sslv3_init, although we never set the digest_size. At the moment,
-I've added a command to set it in the code (before the call) to make it verify, although it
-shouldn't be there.
-
-
-
-*/
-
 /*
  * Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
