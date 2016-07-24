@@ -1,3 +1,5 @@
+
+
 /*
  * Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
@@ -18,7 +20,6 @@
 #include <stdint.h>
 #include <vcc.h>
 #include "s2n_hash.h"
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -40,13 +41,63 @@
 #define inclusive_range_check( low, n, high )  gte_check(n, low); lte_check(n, high)
 #define exclusive_range_check( low, n, high )  gt_check(n, low); lt_check(n, high)
 
-#define wrap_state(s) \
-    _(union_reinterpret &s->hash_ctx.sha1) \
-    s->alg = S2N_HASH_SHA1; \
-    _(wrap &s->hash_ctx) \
-    _(wrap &s->hash_ctx.sha1) \
-    _(ghost s->\owns = {&s->hash_ctx.sha1, &s->hash_ctx}) \
-    _(wrap s)
+uint8_t *  memset(uint8_t * dst, uint8_t val, size_t size)
+       _(requires \mutable_array(dst,size))
+       _(writes \array_range(dst,size))
+       _(ensures \forall size_t i; i < size ==> dst[i] == val)
+       _(ensures \result == dst)
+;
+ 
+uint8_t * memcpy(uint8_t *dst, uint8_t *src, size_t size)
+       _(writes \array_range(dst,size))
+       _(requires \thread_local_array(src,size))
+       _(requires \arrays_disjoint(dst,size, src,size))
+       _(ensures \forall size_t i; i < size ==> dst[i] == \old(src[i]))
+       _(ensures \result == dst)
+;
+
+/*#define wrap_state(s) \
+    if(s->alg == S2N_HASH_NONE) { \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx})} \
+    else if(s->alg == S2N_HASH_MD5) { \
+        _(union_reinterpret &s->hash_ctx.md5) \ 
+        _(wrap &s->hash_ctx.md5) \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx.md5, &s->hash_ctx})} \
+    else if(s->alg == S2N_HASH_SHA1) { \
+        _(union_reinterpret &s->hash_ctx.sha1) \ 
+        _(wrap &s->hash_ctx.sha1) \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx.sha1, &s->hash_ctx})} \
+    else if(s->alg == S2N_HASH_SHA224) { \
+        _(union_reinterpret &s->hash_ctx.sha224) \ 
+        _(wrap &s->hash_ctx.sha224) \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx.sha224, &s->hash_ctx})} \
+    else if(s->alg == S2N_HASH_SHA256) { \
+        _(union_reinterpret &s->hash_ctx.sha256) \ 
+        _(wrap &s->hash_ctx.sha256) \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx.sha256, &s->hash_ctx})} \
+    else if(s->alg == S2N_HASH_SHA384) { \
+        _(union_reinterpret &s->hash_ctx.sha384) \ 
+        _(wrap &s->hash_ctx.sha384) \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx.sha384, &s->hash_ctx})} \
+    else if(s->alg == S2N_HASH_SHA512) { \
+        _(union_reinterpret &s->hash_ctx.sha512)  \
+        _(wrap &s->hash_ctx.sha512) \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx.sha512, &s->hash_ctx})} \
+    else if(s->alg == S2N_HASH_MD5_SHA1) { \
+        _(union_reinterpret &s->hash_ctx.md5_sha1) \ 
+        _(wrap &s->hash_ctx.md5_sha1.sha1) \
+        _(wrap &s->hash_ctx.md5_sha1.md5) \
+        _(wrap &s->hash_ctx.md5_sha1) \
+        _(wrap &s->hash_ctx) \
+        _(ghost s->\owns = {&s->hash_ctx.md5_sha1, &s->hash_ctx.md5_sha1.sha1, &s->hash_ctx.md5_sha1.md5, &s->hash_ctx})} \
+    else {_(assert 0)} */
 
 typedef enum { S2N_HMAC_NONE, S2N_HMAC_MD5, S2N_HMAC_SHA1, S2N_HMAC_SHA224, S2N_HMAC_SHA256, S2N_HMAC_SHA384,
     S2N_HMAC_SHA512, S2N_HMAC_SSLv3_MD5, S2N_HMAC_SSLv3_SHA1
@@ -79,6 +130,11 @@ struct s2n_hmac_state {
     _(invariant block_size != 0)
     _(invariant sizeof(xor_pad) >= block_size)
 };
+
+typedef union s2n_hmac_state2{
+    struct s2n_hmac_state t;
+    _(backing_member) uint8_t asBytes[sizeof(struct s2n_hmac_state)];
+} s2n_hmac_state2;
 
 extern int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
     _(requires alg >= 0 && alg <= 8)
@@ -166,6 +222,7 @@ extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, c
     _(requires \extent_mutable(state))
     _(requires \wrapped(\domain_root(\embedding((uint8_t *)key))))
     _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
+    _(requires \thread_local_array((uint8_t *)state->xor_pad, state->digest_size))
     _(requires \thread_local_array((uint8_t *)key,klen))
     _(requires alg >= 0 && alg <= 8)
     _(writes \extent(state))
@@ -251,7 +308,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         GUARD(s2n_hash_digest(&state->outer, state->digest_pad, state->digest_size)); 
         _(assert \inv(&state->outer))
         _(assert state->digest_size ==> state->xor_pad != NULL)
-        memcpy/*_check*/(state->xor_pad, state->digest_pad, state->digest_size);
+        memcpy(state->xor_pad, state->digest_pad, state->digest_size);
         _(assert state->digest_size ==> state->xor_pad != NULL)
         copied = state->digest_size;
     } else {
@@ -341,7 +398,8 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
    
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
     _(assert sizeof(state->inner) ==> &state->inner != NULL)
-    memcpy/*_check*/(&state->inner, &state->outer, sizeof(state->inner));
+    //memcpy/*_check*/(&state->inner, &state->outer, sizeof(state->inner));
+    state->inner = state->outer; //USER ADDED INSTEAD OF MEMCPY
     _(unwrap &state->inner)
     (&state->inner)->alg = (&state->outer)->alg;
     _(wrap &state->inner)
@@ -432,30 +490,114 @@ int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
 }
 
 
+
 extern int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(requires \mutable(state) && \extent_mutable(&state->inner) && \wrapped(&state->inner_just_key) && \wrapped(&state->outer))
     _(requires (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
     _(requires (&state->outer)->alg == hmac_to_hash(state->alg))
+    _(requires state->alg >= 0 && state->alg <= 8)
     _(requires state->hash_block_size >= 9)
     _(requires state->digest_size == alg_digest_size(hmac_to_hash(state->alg)))
     _(requires state->block_size != 0)
+    _(requires sizeof(state->xor_pad) >= state->block_size)
     _(writes \span(state), \extent(&state->inner), &state->inner_just_key, &state->outer)
     _(ensures (&state->inner)->alg == (&state->inner_just_key)->alg)
     _(ensures \wrapped(state))
-    _(ensures \result == 0)
+    //_(ensures \result == 0)
 ;
 
 int s2n_hmac_reset(struct s2n_hmac_state *state)
 {
-    //MEMCPY NON WORKING - ASSUME THIS TO WORK FOR NOW, ASK ERNIE
-
     state->currently_in_hash_block = 0;
     _(assert sizeof(state->inner) ==> &state->inner != NULL)
-    memcpy/*_check*/(&state->inner, &state->inner_just_key, sizeof(state->inner));
-    s2n_hash_init(&state->inner, (&state->inner_just_key)->alg); //USER ADDED, IN PLACE OF MEMCPY
+    hash_state_destroy(&state->inner_just_key);
+    //memcpy/*_check*/(&state->inner, &state->inner_just_key, sizeof(state->inner));
+    state->inner = state->inner_just_key;
+    _(assert (&state->inner)->alg == (&state->inner_just_key)->alg)
+    _(assert (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
+    //TO DO: REPLACE WITH COMMAND TO WRAP HASH STATES
+    if((&state->inner_just_key)->alg == S2N_HASH_NONE) {  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx})
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx})}
+    else if((&state->inner_just_key)->alg == S2N_HASH_MD5) {  
+        _(union_reinterpret &(&state->inner_just_key)->hash_ctx.md5)   
+        _(wrap &(&state->inner_just_key)->hash_ctx.md5)  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.md5, &(&state->inner_just_key)->hash_ctx}) 
+        _(union_reinterpret &(&state->inner)->hash_ctx.md5)   
+        _(wrap &(&state->inner)->hash_ctx.md5)  
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.md5, &(&state->inner)->hash_ctx})}  
+    else if((&state->inner_just_key)->alg == S2N_HASH_SHA1) {  
+        _(union_reinterpret &(&state->inner_just_key)->hash_ctx.sha1)   
+        _(wrap &(&state->inner_just_key)->hash_ctx.sha1)  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha1, &(&state->inner_just_key)->hash_ctx}) 
+        _(union_reinterpret &(&state->inner)->hash_ctx.sha1)   
+        _(wrap &(&state->inner)->hash_ctx.sha1)  
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha1, &(&state->inner)->hash_ctx})}  
+    else if((&state->inner_just_key)->alg == S2N_HASH_SHA224) {  
+        _(union_reinterpret &(&state->inner_just_key)->hash_ctx.sha224)   
+        _(wrap &(&state->inner_just_key)->hash_ctx.sha224)  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha224, &(&state->inner_just_key)->hash_ctx})  
+        _(union_reinterpret &(&state->inner)->hash_ctx.sha224)   
+        _(wrap &(&state->inner)->hash_ctx.sha224)  
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha224, &(&state->inner)->hash_ctx})}  
+    else if((&state->inner_just_key)->alg == S2N_HASH_SHA256) {  
+        _(union_reinterpret &(&state->inner_just_key)->hash_ctx.sha256)   
+        _(wrap &(&state->inner_just_key)->hash_ctx.sha256)  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha256, &(&state->inner_just_key)->hash_ctx})  
+        _(union_reinterpret &(&state->inner)->hash_ctx.sha256)   
+        _(wrap &(&state->inner)->hash_ctx.sha256)  
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha256, &(&state->inner)->hash_ctx})}  
+    else if((&state->inner_just_key)->alg == S2N_HASH_SHA384) {  
+        _(union_reinterpret &(&state->inner_just_key)->hash_ctx.sha384)   
+        _(wrap &(&state->inner_just_key)->hash_ctx.sha384)  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha384, &(&state->inner_just_key)->hash_ctx})
+        _(union_reinterpret &(&state->inner)->hash_ctx.sha384)   
+        _(wrap &(&state->inner)->hash_ctx.sha384)  
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha384, &(&state->inner)->hash_ctx})}  
+    else if((&state->inner_just_key)->alg == S2N_HASH_SHA512) {  
+        _(union_reinterpret &(&state->inner_just_key)->hash_ctx.sha512)   
+        _(wrap &(&state->inner_just_key)->hash_ctx.sha512)  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha512, &(&state->inner_just_key)->hash_ctx})  
+        _(union_reinterpret &(&state->inner)->hash_ctx.sha512)   
+        _(wrap &(&state->inner)->hash_ctx.sha512)  
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha512, &(&state->inner)->hash_ctx})}  
+    else if((&state->inner_just_key)->alg == S2N_HASH_MD5_SHA1) {  
+        _(union_reinterpret &(&state->inner_just_key)->hash_ctx.md5_sha1)   
+        _(wrap &(&state->inner_just_key)->hash_ctx.md5_sha1.sha1)  
+        _(wrap &(&state->inner_just_key)->hash_ctx.md5_sha1.md5)  
+        _(wrap &(&state->inner_just_key)->hash_ctx.md5_sha1)  
+        _(wrap &(&state->inner_just_key)->hash_ctx)  
+        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.md5_sha1, &(&state->inner_just_key)->hash_ctx.md5_sha1.sha1, &(&state->inner_just_key)->hash_ctx.md5_sha1.md5, &(&state->inner_just_key)->hash_ctx}) 
+        _(union_reinterpret &(&state->inner)->hash_ctx.md5_sha1)   
+        _(wrap &(&state->inner)->hash_ctx.md5_sha1.sha1)  
+        _(wrap &(&state->inner)->hash_ctx.md5_sha1.md5)  
+        _(wrap &(&state->inner)->hash_ctx.md5_sha1)  
+        _(wrap &(&state->inner)->hash_ctx)  
+        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.md5_sha1, &(&state->inner)->hash_ctx.md5_sha1.sha1, &(&state->inner)->hash_ctx.md5_sha1.md5, &(&state->inner)->hash_ctx})}  
+    else {_(assert 0)}
+    _(wrap &state->inner_just_key)
+    _(wrap &state->inner)
+    _(ghost state->\owns = {&state->inner_just_key, &state->inner, &state->outer})
     _(wrap state)
+    _(assert 0) //FAILS, THOUGH IF I REMOVE IT THE RESULT IS UNREACHABLE
     return 0;
 }
+
+
 
 extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     _(requires \wrapped(from))
@@ -468,14 +610,17 @@ extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     _(ensures \result <= 0)
 ; 
 
-int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
+/*int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
 {
     _(assert sizeof(struct s2n_hmac_state) ==> to != NULL)
-    memcpy/*_check*/(to, from, sizeof(struct s2n_hmac_state));
+    //memcpy_check(to, from, sizeof(struct s2n_hmac_state));
+    to = from; //USED ADDED IN PLACE OF MEMCPY
     wrap_state((&to->inner_just_key));
     wrap_state((&to->inner));
     wrap_state((&to->outer));
-    to->alg = from->alg; //USER ADDED 
     _(wrap to)
     return 0;
-}
+}*/
+
+
+
