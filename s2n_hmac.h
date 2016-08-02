@@ -1,3 +1,13 @@
+/*Making sense of this code
+
+TO DO: 
+1) make sense of how xorpad is initialised: what is set to 0 in the two cases.
+2) prove that before s1, what you end up with is what you'd have if you'd xored with 0x36 directly
+3) prove that what you end up with is exactly what you'd have ended up with by xoring with 0x5c to being with
+
+
+
+*/
 /*
  * Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
@@ -314,14 +324,10 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(ghost state->xorpad.len = state->block_size) //technically, no, but this is the only part we use
     if (klen > state->block_size) {
         GUARD(s2n_hash_update(&state->outer, key, klen));
-        _(assert \inv(&state->outer))
-        _(assert alg_digest_size((&state->outer)->alg) == state->digest_size)
         GUARD(s2n_hash_digest(&state->outer, state->digest_pad, state->digest_size)); 
-        _(assert \inv(&state->outer))
         _(assert state->digest_size ==> state->xor_pad != NULL)
         memcpy/*_check*/(state->xor_pad, state->digest_pad, state->digest_size);
         _(ghost state->xorpad.val = (\lambda \natural i; i<state->digest_size? state->digest_pad[i] : (uint8_t)0))
-        _(assert state->digest_size ==> state->xor_pad != NULL)
         copied = state->digest_size;
     } else {
         _(assert klen ==> state->xor_pad != NULL)
@@ -339,10 +345,8 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         state->xor_pad[i] ^= 0x36;
         _(ghost state->xorpad.val[(\natural)i] = \at(s,state->xorpad.val[(\natural)i]) ^ (uint8_t)0x36)
     }
-    _(assert state->block_size <= 128)
-    _(assert copied <= state->block_size)
     _(assert 0 <= copied)
-    _(assert state->xorpad == xor(\at(s,state->xorpad),concatenate(repeat((uint8_t)0x36,(\natural)copied),repeat((uint8_t)0,(\natural)(state->block_size-copied)))))
+    //_(assert state->xorpad == xor(\at(s,state->xorpad),concatenate(repeat((uint8_t)0x36,(\natural)copied),repeat((uint8_t)0,(\natural)(state->block_size-copied)))))
     _(ghost \state s1 = \now())
     for (int i = (int) copied; i < state->block_size; i++) 
         _(writes \array_range(state->xor_pad + copied,state->block_size - copied))
@@ -356,7 +360,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     }
     GUARD(s2n_hash_update(&state->inner_just_key, state->xor_pad, state->block_size));
     _(ghost \state s2 = \now())
-    _(assert state->xorpad == xor(\at(s,state->xorpad),repeat((uint8_t)0x36,state->xorpad.len)))
+    //_(assert state->xorpad == xor(\at(s,state->xorpad),repeat((uint8_t)0x36,state->xorpad.len)))
     // 0x36 xor 0x5c == 0x6a 
     for (int i = 0; i < state->block_size; i++) 
     _(writes \array_range(state->xor_pad,state->block_size))
@@ -366,12 +370,12 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         _(writes &state->xorpad){
         state->xor_pad[i] ^= 0x6a;
         _(ghost state->xorpad.val[(\natural)i] = \at(s2,state->xorpad.val[(\natural)i])^(uint8_t)0x6a)
-        _(assert 0x36 ^ 0x5c == 0x6a)
     }
-    _(ghost xor_idempotent(\at(s,state->xorpad),(uint8_t)0x36))
-    _(assert \at(s,state->xorpad) == xor(xor(\at(s,state->xorpad),repeat((uint8_t)0x36,state->xorpad.len)),repeat((uint8_t)0x36,state->xorpad.len)))
     _(assert state->xorpad == xor(\at(s2,state->xorpad),repeat((uint8_t)(0x36 ^ 0x5c),state->xorpad.len)))
-    _(ghost xor_combine((uint8_t)0x36,(uint8_t)0x5c,\at(s2,state->xorpad)))
+    _(assert \at(s2,state->xorpad) == xor(\at(s,state->xorpad),repeat((uint8_t)0x36,state->xorpad.len)))
+    _(assert state->xorpad == xor(xor(\at(s,state->xorpad),repeat((uint8_t)0x36,\at(s,state->xorpad).len)),repeat((uint8_t)(0x36 ^ 0x5c),\at(s,state->xorpad).len)))
+    _(ghost xor_combine((uint8_t)0x36,(uint8_t)(0x36 ^ 0x5c),\at(s,state->xorpad)))
+    _(assert state->xorpad == xor(\at(s,state->xorpad),repeat((uint8_t)(0x36 ^ (0x36 ^ 0x5c)),\at(s,state->xorpad).len)))
     _(assert state->xorpad == xor(\at(s,state->xorpad),repeat((uint8_t)0x5c,state->xorpad.len)))
     return s2n_hmac_reset(state);
 }
