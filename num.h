@@ -29,6 +29,12 @@ _(ensures \result == 1)
 }
 )
 
+_(def Num make_num(uint8_t *a, size_t b)
+{
+    Num n;
+    return n/{.val = (\lambda \natural i; i<b? a[i] : (uint8_t)0), .len=0};
+})
+
 _(def Num repeat(uint8_t a, \natural size)
 _(ensures valid(\result))
 {
@@ -78,7 +84,7 @@ _(maintains valid(n1))
 {
     if(size < n1.len)
     {
-        return n1/{.len = size};
+        return n1/{.val = (\lambda \natural i; i<size? n1.val[i] : (uint8_t)0), .len = size};
     }
     else if(size == n1.len)
     {
