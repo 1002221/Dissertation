@@ -550,6 +550,7 @@ extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_
     _(ensures \wrapped(state))
     _(ensures state->alg ==> hashState(state,0) == concatenate(\old(hashState(state,0)),make_num((uint8_t *)in,size)))
     _(ensures state->alg == S2N_HASH_MD5_SHA1 ==> hashState(state,1) == concatenate(\old(hashState(state,1)),make_num((uint8_t *)in,size)))
+    _(ensures \result <= 0)
     _(decreases 0)
 ;
 
