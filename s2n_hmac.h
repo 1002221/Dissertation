@@ -1,37 +1,3 @@
-/*1)      Introduce ghost functions, i.e. declare something like 
-_(ghost _(pure) Num hashInit(HashAlgorithm alg))
-OK, SO WE JUST RETURN SOME NUM ACCORDING TO WHAT THE ALG IS? OK, GET IT TO RETURN SHA1_ALG, MA5_ALG, ETC., BUT WHAT ACTUALLY ARE THEY?
-
-_(ghost _(pure) Num hashDigest(HashAlgorithm alg, Num state, Num input))
-EQUIVALENT OF UPDATE? OK, SO STATE IS A CTX, BUT WHAT'S INPUT AND WHERE DOES IT COME FROM?
-POSSIBLE EXPLANATION: GIVEN USER INPUT, MODIFY STATE (THE NUM IN A CTX) ACCORDING TO THE ALG
-
-
-
-3)      For something like sha1_hash_init(Sha1HashCtx *c, char *input, size_t len), give a contract like _(ensures c->val == hashInit(SHA1_ALG)); for
-sha1_hash_digest(Sha1HashCtx *c) give a contract like _(ensures c->val == hashDigest(SHA1_ALG, \old(c->val), getNum(input,len))) etc.
-DONE, THOUGH WHAT'S GETNUM?
-4)      Define a ghost function _(def hashState(HashCtx *c) { switch (c->alg) { case SHA1_ALG: return c->sha1Ctx.val; … }). Optionally [I.E., ON TOP
-OF, NOT INSTEAD OF], add a ghost val field to the generic HashCtx _(inv val == hashState(\this)).
-WHAT IS 
-
-5)      Add suitable postconditions to the generic hash functions, e.g. on generic hash_init(HashCtx *c, HashAlg alg) add the postcondition 
-_(ensures c->val == hashInit(c->alg))
-CTXs DON'T HAVE A FIELD CALLED ALG. PERHAPS SHOULD BE 
-_(ensures c->val == hashInit(alg))
-IF SO, DONE
-NO, HERE HE MEANT STATE, NOT HASHCTX. 
-
-
-NOW, MAKE LIST OF WHAT WE HAVE
-
-hashstate - takes CTX and returns its 'val' field
-hashinit - converts s2n_hash_algorithm to Num
-hashdigest - modifies the 'val' field of a CTX according to input (?)
-hashval - hash the 'val' field of a CTX according to the alg?
-
-
-
 /*
  * Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
@@ -152,13 +118,13 @@ struct s2n_hmac_state {
     uint8_t xor_pad[128];
     _(ghost Num xorpad)
     _(invariant valid(xorpad))
-    _(invariant xorpad.len == sizeof(xor_pad))
+    _(invariant xorpad.len == block_size)
     _(invariant xorpad.val == (\lambda \natural i; i<128? xor_pad[i] : (uint8_t)0))
     /* For storing the inner digest */
     uint8_t digest_pad[SHA512_DIGEST_LENGTH];
     _(ghost Num digestpad)
     _(invariant valid(digestpad))
-    _(invariant digestpad.len == sizeof(digest_pad))
+    _(invariant digestpad.len == digest_size)
     _(invariant digestpad.val == (\lambda \natural i; i<SHA512_DIGEST_LENGTH? digest_pad[i] : (uint8_t)0))
 
     _(invariant alg>= 0 && alg <= 8)
@@ -538,9 +504,13 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
 extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state))
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
+    _(requires state->alg <= 6)
     _(writes state, \array_range(_(uint8_t *)outt, size)) 
     _(ensures !\result ==> \wrapped(state))
     _(ensures \unchanged(state->hash_block_size))
+    _(ensures !\result && state->alg == S2N_HASH_MD5 ==> state->digestpad == hashVal(\old((&(&state->inner)->hash_ctx.md5)->val),S2N_HASH_MD5))
+    _(ensures !\result && state->alg == S2N_HASH_MD5 ==> make_num((uint8_t *)outt,size)==hashVal(concatenate(concatenate(repeat((uint8_t)0,0),state->xorpad),state->digestpad),S2N_HASH_MD5))  
+    _(ensures !\result && state->alg == S2N_HASH_MD5 ==> (&(&state->outer)->hash_ctx.md5)->val == repeat((uint8_t)0,0))
     _(ensures \result <= 0)
 ;
 
@@ -551,11 +521,17 @@ int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     }
     _(unwrap state) 
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
+    _(ghost state->digestpad.val = (\lambda \natural i; i<state->digest_size? state->digest_pad[i] : (uint8_t)0))
+    _(assert state->alg == S2N_HASH_MD5 ==> state->digestpad == hashVal(\old((&(&state->inner)->hash_ctx.md5)->val),S2N_HASH_MD5))
     GUARD(s2n_hash_reset(&state->outer));
+    _(assert state->alg == S2N_HASH_MD5 ==> (&(&state->outer)->hash_ctx.md5)->val == repeat((uint8_t)0,0))
     GUARD(s2n_hash_update(&state->outer, state->xor_pad, state->block_size));
+    _(assert state->alg == S2N_HASH_MD5 ==> (&(&state->outer)->hash_ctx.md5)->val == concatenate(repeat((uint8_t)0,0),state->xorpad))
     GUARD(s2n_hash_update(&state->outer, state->digest_pad, state->digest_size));
+    _(assert state->alg == S2N_HASH_MD5 ==> (&(&state->outer)->hash_ctx.md5)->val == concatenate(concatenate(repeat((uint8_t)0,0),state->xorpad),state->digestpad))
     { 
         int res = s2n_hash_digest(&state->outer,outt, size);
+        _(assert state->alg == S2N_HASH_MD5 ==> make_num((uint8_t *)outt,size)==hashVal(concatenate(concatenate(repeat((uint8_t)0,0),state->xorpad),state->digestpad),S2N_HASH_MD5))
         _(wrap state)
         return res; 
     }
