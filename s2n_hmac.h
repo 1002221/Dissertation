@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
@@ -255,18 +256,8 @@ extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, c
     //no - we want a postcondition relating xorpad to klen. this is gonna be really complicated.
     _(ensures !\result && klen <= block_size_alg(alg) && alg<=6 ==> state->xorpad.val == (\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)(0x5c)) : (i<block_size_alg(alg)? (uint8_t)(0x5c) :(uint8_t)0)))
     _(ensures !\result && klen > block_size_alg(alg) && alg==2 ==> state->xorpad.val == (\lambda \natural i; i<state->digest_size? (uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),S2N_HASH_SHA1).val)[i]^(uint8_t)(0x5c)) : (i<block_size_alg(alg)? (uint8_t)(0x5c) :(uint8_t)0)))
-    _(ensures !\result && alg == S2N_HMAC_MD5 ==> (&(&state->inner)->hash_ctx.md5)->val == concatenate(\old((&(&state->inner_just_key)->hash_ctx.md5)->val),state->xorpad))
-    _(ensures !\result && alg == S2N_HMAC_SHA1 ==> (&(&state->inner)->hash_ctx.sha1)->val == concatenate(\old((&(&state->inner_just_key)->hash_ctx.sha1)->val),state->xorpad))
-    _(ensures !\result && alg == S2N_HMAC_SHA224 ==> (&(&state->inner)->hash_ctx.sha224)->val == concatenate(\old((&(&state->inner_just_key)->hash_ctx.sha224)->val),state->xorpad))
-    _(ensures !\result && alg == S2N_HMAC_SHA256 ==> (&(&state->inner)->hash_ctx.sha256)->val == concatenate(\old((&(&state->inner_just_key)->hash_ctx.sha256)->val),state->xorpad))
-    _(ensures !\result && alg == S2N_HMAC_SHA384 ==> (&(&state->inner)->hash_ctx.sha384)->val == concatenate(\old((&(&state->inner_just_key)->hash_ctx.sha384)->val),state->xorpad))
-    _(ensures !\result && alg == S2N_HMAC_SHA512 ==> (&(&state->inner)->hash_ctx.sha512)->val == concatenate(\old((&(&state->inner_just_key)->hash_ctx.sha512)->val),state->xorpad))
-    _(ensures !\result && alg == S2N_HMAC_MD5 ==> (&(&state->outer)->hash_ctx.md5)->val == repeat((uint8_t)0,0))
-    _(ensures !\result && alg == S2N_HMAC_SHA1 ==> (&(&state->outer)->hash_ctx.sha1)->val == repeat((uint8_t)0,0))
-    _(ensures !\result && alg == S2N_HMAC_SHA224 ==> (&(&state->outer)->hash_ctx.sha224)->val == repeat((uint8_t)0,0))
-    _(ensures !\result && alg == S2N_HMAC_SHA256 ==> (&(&state->outer)->hash_ctx.sha256)->val == repeat((uint8_t)0,0))
-    _(ensures !\result && alg == S2N_HMAC_SHA384 ==> (&(&state->outer)->hash_ctx.sha384)->val == repeat((uint8_t)0,0))
-    _(ensures !\result && alg == S2N_HMAC_SHA512 ==> (&(&state->outer)->hash_ctx.sha512)->val == repeat((uint8_t)0,0))
+    _(ensures !\result && alg<=6 ==> hashState(&state->inner,0) == concatenate(\old(hashState(&state->inner,0)),state->xorpad))
+    _(ensures !\result && alg<=6  ==> hashState(&state->outer,0) == repeat((uint8_t)0,0))
     _(decreases 0)
 ;
 
@@ -428,12 +419,7 @@ extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_
     _(requires state->currently_in_hash_block + (4294949760 + size) % state->hash_block_size <= _UI32_MAX - SYSTEM_PAGE_SIZE())
     _(writes state)
     _(ensures !\result ==> \wrapped(state))
-    _(ensures !\result && state->alg == S2N_HMAC_MD5 ==> (&(&state->inner)->hash_ctx.md5)->val == concatenate(\old((&(&state->inner)->hash_ctx.md5)->val),make_num((uint8_t *)in,size)))
-    _(ensures !\result && state->alg == S2N_HMAC_SHA1 ==> (&(&state->inner)->hash_ctx.sha1)->val == concatenate(\old((&(&state->inner)->hash_ctx.sha1)->val),make_num((uint8_t *)in,size)))
-    _(ensures !\result && state->alg == S2N_HMAC_SHA224 ==> (&(&state->inner)->hash_ctx.sha224)->val == concatenate(\old((&(&state->inner)->hash_ctx.sha224)->val),make_num((uint8_t *)in,size)))
-    _(ensures !\result && state->alg == S2N_HMAC_SHA256 ==> (&(&state->inner)->hash_ctx.sha256)->val == concatenate(\old((&(&state->inner)->hash_ctx.sha256)->val),make_num((uint8_t *)in,size)))
-    _(ensures !\result && state->alg == S2N_HMAC_SHA384 ==> (&(&state->inner)->hash_ctx.sha384)->val == concatenate(\old((&(&state->inner)->hash_ctx.sha384)->val),make_num((uint8_t *)in,size)))
-    _(ensures !\result && state->alg == S2N_HMAC_SHA512 ==> (&(&state->inner)->hash_ctx.sha512)->val == concatenate(\old((&(&state->inner)->hash_ctx.sha512)->val),make_num((uint8_t *)in,size)))
+    _(ensures !\result && state->alg>0 && state->alg<=6 ==> hashState(&state->inner,0) == concatenate(\old(hashState(&state->inner,0)),make_num((uint8_t *)in,size)))
     _(ensures \result <= 0);
 
 int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
@@ -508,9 +494,9 @@ extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t si
     _(writes state, \array_range(_(uint8_t *)outt, size)) 
     _(ensures !\result ==> \wrapped(state))
     _(ensures \unchanged(state->hash_block_size))
-    _(ensures !\result && state->alg == S2N_HASH_MD5 ==> state->digestpad == hashVal(\old((&(&state->inner)->hash_ctx.md5)->val),S2N_HASH_MD5))
-    _(ensures !\result && state->alg == S2N_HASH_MD5 ==> make_num((uint8_t *)outt,size)==hashVal(concatenate(concatenate(repeat((uint8_t)0,0),state->xorpad),state->digestpad),S2N_HASH_MD5))  
-    _(ensures !\result && state->alg == S2N_HASH_MD5 ==> (&(&state->outer)->hash_ctx.md5)->val == repeat((uint8_t)0,0))
+    _(ensures !\result && state->alg && state->alg<=6 ==> state->digestpad == hashVal(\old(hashState(&state->inner,0)),hmac_to_hash(state->alg)))
+    _(ensures !\result && state->alg && state->alg<=6 ==> make_num((uint8_t *)outt,size)==hashVal(concatenate(concatenate(repeat((uint8_t)0,0),state->xorpad),state->digestpad),hmac_to_hash(state->alg)))  
+    _(ensures !\result && state->alg && state->alg<=6 ==> hashState(&state->outer,0) == repeat((uint8_t)0,0))
     _(ensures \result <= 0)
 ;
 
