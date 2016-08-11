@@ -23,7 +23,6 @@ typedef struct MD5state_st
 	unsigned int num;
     _(ghost Num val)
     _(invariant valid(val))
-    //_(invariant val == hashState(\this))
 	} MD5_CTX;
 
 typedef struct MD5state_st2
@@ -34,7 +33,6 @@ typedef struct MD5state_st2
 	unsigned int num;
     _(ghost Num val)
     _(invariant valid(val))
-    //(invariant val == hashState(\this))
 	} MD5_CTX2;
 
 int MD5_Init(MD5_CTX *c)
@@ -56,7 +54,7 @@ int MD5_Init2(MD5_CTX2 *c)
 ;
 
 int MD5_Update(MD5_CTX *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -65,16 +63,17 @@ int MD5_Update(MD5_CTX *c, const void *data, size_t len)
 ;
 
 int MD5_Update2(MD5_CTX2 *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c) && \thread_local_array((uint8_t *)data,len) && !(data \in \domain(c)))
     _(writes c)
-    _(ensures \wrapped(c))
+    _(ensures \wrapped(c)&& \thread_local_array((uint8_t *)data,len))
     _(ensures \result == 1)
-    _(ensures c->val == concatenate(\old(c->val),make_num((uint8_t *)data,len)))
+    _(ensures c->val == concatenate(\old(c->val),make_num((uint8_t *)data,len)) && !(data \in \domain(c)))
+    _(ensures \unchanged(make_num((uint8_t *)data,len)))
     _(decreases 0)
 ;
 
 int MD5_Final(void *md, MD5_CTX *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,MD5_DIGEST_LENGTH))
     _(writes \array_range(_(uint8_t *)md, MD5_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -84,7 +83,7 @@ int MD5_Final(void *md, MD5_CTX *c)
 ;
 
 int MD5_Final2(void *md, MD5_CTX2 *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,MD5_DIGEST_LENGTH))
     _(writes \array_range(_(uint8_t *)md,  MD5_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -109,7 +108,6 @@ typedef struct SHAstate_st
 	unsigned int num;
     _(ghost Num val)
     _(invariant valid(val))
-    //_(invariant val == hashState(\this))
 	} SHA_CTX;
 
 typedef struct SHAstate_st2
@@ -120,7 +118,6 @@ typedef struct SHAstate_st2
 	unsigned int num;
     _(ghost Num val)
     _(invariant valid(val))
-    //_(invariant val == hashState(\this))
 	} SHA_CTX2;
 
 int SHA1_Init(SHA_CTX *c)
@@ -142,25 +139,27 @@ int SHA1_Init2(SHA_CTX2 *c)
 ;
 
 int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == concatenate(\old(c->val),make_num((uint8_t *)data,len)))
+    _(ensures \unchanged(make_num((uint8_t *)data,len)))
     _(decreases 0)
 ;
 
 int SHA1_Update2(SHA_CTX2 *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len) && !(data \in \domain(c)))
     _(writes c)
-    _(ensures \wrapped(c))
+    _(ensures \wrapped(c)&& \thread_local_array((uint8_t *)data,len) && !(data \in \domain(c)))
     _(ensures \result == 1)
     _(ensures c->val == concatenate(\old(c->val),make_num((uint8_t *)data,len)))
+    _(ensures \unchanged(make_num((uint8_t *)data,len)))
     _(decreases 0)
 ;
 
 int SHA1_Final(void *md, SHA_CTX *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,SHA_DIGEST_LENGTH))
     _(writes \array_range((uint8_t *)md, SHA_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -170,7 +169,7 @@ int SHA1_Final(void *md, SHA_CTX *c)
 ;
 
 int SHA1_Final2(void *md, SHA_CTX2 *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,SHA_DIGEST_LENGTH))
     _(writes \array_range(md,SHA_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -187,7 +186,6 @@ typedef struct SHA224state_st
 	unsigned int num,md_len;
     _(ghost Num val)
     _(invariant valid(val))
-    //_(invariant val == hashState(\this))
 	} SHA224_CTX;
 
 typedef struct SHA256state_st
@@ -198,7 +196,6 @@ typedef struct SHA256state_st
 	unsigned int num,md_len;
     _(ghost Num val)
     _(invariant valid(val))
-    //_(invariant val == hashState(\this))
 	} SHA256_CTX;
 
 int SHA224_Init(SHA224_CTX *c)
@@ -211,7 +208,7 @@ int SHA224_Init(SHA224_CTX *c)
 ;
 
 int SHA224_Update(SHA224_CTX *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -220,7 +217,7 @@ int SHA224_Update(SHA224_CTX *c, const void *data, size_t len)
 ;
 
 int SHA224_Final(void *md, SHA224_CTX *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,SHA224_DIGEST_LENGTH))
     _(writes \array_range(_(uint8_t *)md, SHA224_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -239,7 +236,7 @@ int SHA256_Init(SHA256_CTX *c)
 ;
 
 int SHA256_Update(SHA256_CTX *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -248,7 +245,7 @@ int SHA256_Update(SHA256_CTX *c, const void *data, size_t len)
 ;
 
 int SHA256_Final(void *md, SHA256_CTX *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,SHA256_DIGEST_LENGTH))
     _(writes \array_range(_(uint8_t *)md, SHA256_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -272,7 +269,6 @@ typedef struct SHA384state_st
     unsigned int num,md_len;
     _(ghost Num val)
     _(invariant valid(val))
-    //_(invariant val == hashState(\this))
     } SHA384_CTX;
 
 typedef struct SHA512state_st
@@ -287,7 +283,6 @@ typedef struct SHA512state_st
     unsigned int num,md_len;
     _(ghost Num val)
     _(invariant valid(val))
-    //_(invariant val == hashState(\this))
     } SHA512_CTX;
 
 int SHA384_Init(SHA384_CTX *c)
@@ -300,7 +295,7 @@ int SHA384_Init(SHA384_CTX *c)
 ;
 
 int SHA384_Update(SHA384_CTX *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -309,7 +304,7 @@ int SHA384_Update(SHA384_CTX *c, const void *data, size_t len)
 ;
 
 int SHA384_Final(void *md, SHA384_CTX *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,SHA384_DIGEST_LENGTH))
     _(writes \array_range(_(uint8_t *)md, SHA384_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -328,7 +323,7 @@ int SHA512_Init(SHA512_CTX *c)
 ;
 
 int SHA512_Update(SHA512_CTX *c, const void *data, size_t len)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -337,7 +332,7 @@ int SHA512_Update(SHA512_CTX *c, const void *data, size_t len)
 ;
 
 int SHA512_Final(void *md, SHA512_CTX *c)
-    _(requires \wrapped(c))
+    _(requires \wrapped(c)&& \thread_local_array((uint8_t *)md,SHA512_DIGEST_LENGTH))
     _(writes \array_range(_(uint8_t *)md, SHA512_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
@@ -382,20 +377,15 @@ int hash_state_destroy(struct s2n_hash_state *s)
     _(ensures \extent_fresh(s))
     _(ensures \extent_mutable(s))
     _(ensures \unchanged(s->alg))
-    _(ensures s->alg == S2N_HASH_MD5 ==> \unchanged((&s->hash_ctx.md5)->val))
-    _(ensures s->alg == S2N_HASH_SHA1 ==> \unchanged((&s->hash_ctx.sha1)->val))
-    _(ensures s->alg == S2N_HASH_SHA224 ==> \unchanged((&s->hash_ctx.sha224)->val))
-    _(ensures s->alg == S2N_HASH_SHA256 ==> \unchanged((&s->hash_ctx.sha256)->val))
-    _(ensures s->alg == S2N_HASH_SHA384 ==> \unchanged((&s->hash_ctx.sha384)->val))
-    _(ensures s->alg == S2N_HASH_SHA512 ==> \unchanged((&s->hash_ctx.sha512)->val))
-    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \unchanged((&s->hash_ctx.md5_sha1.md5)->val) && \unchanged((&s->hash_ctx.md5_sha1.sha1)->val))
-    _(ensures s->alg == S2N_HASH_MD5 ==> valid((&s->hash_ctx.md5)->val) && \union_active(&s->hash_ctx.md5))
-    _(ensures s->alg == S2N_HASH_SHA1 ==> valid((&s->hash_ctx.sha1)->val) && \union_active(&s->hash_ctx.sha1))
-    _(ensures s->alg == S2N_HASH_SHA224 ==> valid((&s->hash_ctx.sha224)->val) && \union_active(&s->hash_ctx.sha224))
-    _(ensures s->alg == S2N_HASH_SHA256 ==> valid((&s->hash_ctx.sha256)->val) && \union_active(&s->hash_ctx.sha256))
-    _(ensures s->alg == S2N_HASH_SHA384 ==> valid((&s->hash_ctx.sha384)->val) && \union_active(&s->hash_ctx.sha384))
-    _(ensures s->alg == S2N_HASH_SHA512 ==> valid((&s->hash_ctx.sha512)->val) && \union_active(&s->hash_ctx.sha512))
-    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> valid((&s->hash_ctx.md5_sha1.md5)->val) && valid((&s->hash_ctx.md5_sha1.sha1)->val) && \union_active(&s->hash_ctx.md5_sha1))
+    _(ensures s->alg ==> \unchanged(hashState(s,0)) && valid(hashState(s,0)))
+    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \unchanged(hashState(s,1)) && valid(hashState(s,1)))
+    _(ensures s->alg == S2N_HASH_MD5 ==> \union_active(&s->hash_ctx.md5))
+    _(ensures s->alg == S2N_HASH_SHA1 ==> \union_active(&s->hash_ctx.sha1))
+    _(ensures s->alg == S2N_HASH_SHA224 ==> \union_active(&s->hash_ctx.sha224))
+    _(ensures s->alg == S2N_HASH_SHA256 ==> \union_active(&s->hash_ctx.sha256))
+    _(ensures s->alg == S2N_HASH_SHA384 ==> \union_active(&s->hash_ctx.sha384))
+    _(ensures s->alg == S2N_HASH_SHA512 ==> \union_active(&s->hash_ctx.sha512))
+    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \union_active(&s->hash_ctx.md5_sha1))
     _(decreases 0)
 ;
 
@@ -438,7 +428,6 @@ _(def uint32_t alg_digest_size(s2n_hash_algorithm alg)
     else return 0;
 })
 
-    //Z PROBLEM HERE - THERE ISN'T JUST ONE TYPE OF CTX.
 _(def Num hashState(struct s2n_hash_state *s, int a) { 
     if (s->alg == S2N_HASH_NONE) return repeat((uint8_t)0,0); 
     else if (s->alg == S2N_HASH_MD5) return (&s->hash_ctx.md5)->val; 
@@ -459,7 +448,6 @@ extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
     _(ensures state->alg == alg)
     _(ensures \wrapped(state))
     _(ensures \result <= 0)
-    //z TO WRITE PROPERLY _(ensures hashinit(alg) == hashstate(state->ctx))
     _(ensures !\result ==> &state->hash_ctx \in state->\owns)
     _(ensures !\result && alg == S2N_HASH_MD5 ==> &state->hash_ctx.md5 \in state->\owns)
     _(ensures !\result && alg == S2N_HASH_SHA1 ==> &state->hash_ctx.sha1 \in state->\owns)
@@ -542,8 +530,8 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
 }
 
 extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
-    _(requires \wrapped(state))
-    _(requires state->alg <= 6)
+    _(requires \wrapped(state) && \thread_local_array((uint8_t *)in,size))
+    _(requires !(in \in \domain(state)))
     _(writes state)
     _(ensures \result <= 0)
     _(ensures \unchanged(state->alg))
@@ -581,16 +569,8 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
         r = SHA512_Update(&state->hash_ctx.sha512, data, size);
         break;
     case S2N_HASH_MD5_SHA1:
-        _(unwrap &state->hash_ctx.md5_sha1)
-        _(assert \wrapped(&state->hash_ctx.md5_sha1.md5))
-        _(assert \wrapped(&state->hash_ctx.md5_sha1.sha1))
+        r = SHA1_Update2(&state->hash_ctx.md5_sha1.sha1, data, size);
         r = MD5_Update2(&state->hash_ctx.md5_sha1.md5, data, size);
-        _(wrap &state->hash_ctx.md5_sha1)
-        _(unwrap &state->hash_ctx.md5_sha1)
-        r &= SHA1_Update2(&state->hash_ctx.md5_sha1.sha1, data, size);
-        _(assert (&state->hash_ctx.md5_sha1.md5)->val == concatenate(\old((&state->hash_ctx.md5_sha1.md5)->val),make_num((uint8_t *)data,size)))
-        _(wrap &state->hash_ctx.md5_sha1)
-        //r &= MD5_Update2(&state->hash_ctx.md5_sha1.md5, data, size);
         break;
     default:
         //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
@@ -612,7 +592,7 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
     _(ensures \result <= 0)
     _(ensures \unchanged(state->alg))
     _(ensures \wrapped(state))
-    _(ensures state->alg>0 && state->alg<=6 ==> make_num((uint8_t *)outt,size) == hashVal(\old(hashState(state,0)),state->alg))
+    _(ensures state->alg && state->alg<=6 ==> make_num((uint8_t *)outt,size) == hashVal(\old(hashState(state,0)),state->alg))
     _(ensures state->alg == S2N_HASH_MD5_SHA1 ==> make_num((uint8_t *)outt,size) == concatenate(hashVal(\old(hashState(state,0)),S2N_HASH_MD5),hashVal(\old(hashState(state,1)),S2N_HASH_SHA1)))
     _(ensures state->alg ==> hashState(state,0) == repeat((uint8_t)0,0))
     _(ensures state->alg == S2N_HASH_MD5_SHA1 ==> hashState(state,1) == repeat((uint8_t)0,0))
@@ -716,7 +696,6 @@ int s2n_hash_reset(struct s2n_hash_state *state)
 
 extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(requires \extent_mutable(to))
-    _(requires to->alg >= 0 && to->alg <= 7)
     _(requires \wrapped(from))
     _(requires from != to)
     _(writes \extent(to),from)
