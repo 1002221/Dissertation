@@ -118,15 +118,15 @@ struct s2n_hmac_state {
     uint8_t xor_pad[128];
     _(ghost Num xorpad)
     _(invariant valid(xorpad))
-    _(invariant xorpad.len == block_size)
+    _(invariant xorpad.len == 128)
     _(invariant xorpad.val == (\lambda \natural i; i<block_size? xor_pad[i] : (uint8_t)0))
     /* For storing the inner digest */
     uint8_t digest_pad[SHA512_DIGEST_LENGTH];
     _(ghost Num digestpad)
     _(invariant valid(digestpad))
-    _(invariant digestpad.len == digest_size)
+    _(invariant digestpad.len == SHA512_DIGEST_LENGTH)
     _(invariant digestpad.val == (\lambda \natural i; i<digest_size? digest_pad[i] : (uint8_t)0))
-    _(invariant alg> 0 && alg <= 8)
+    _(invariant alg>0 && alg <= 8)
     _(invariant (&inner)->alg == hmac_to_hash(alg))
     _(invariant (&inner_just_key)->alg == hmac_to_hash(alg))
     _(invariant (&outer)->alg == hmac_to_hash(alg))
@@ -203,25 +203,23 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(requires \extent_mutable(state))
     _(requires alg == state->alg)
     _(requires state->alg == S2N_HMAC_SSLv3_SHA1 || state->alg == S2N_HMAC_SSLv3_MD5)
-    _(requires state->alg == S2N_HMAC_SSLv3_SHA1 ==> state->block_size == 40 && state->digest_size == SHA_DIGEST_LENGTH)
-    _(requires state->alg == S2N_HMAC_SSLv3_MD5 ==> state->block_size == 48 && state->digest_size == MD5_DIGEST_LENGTH)
+    _(requires state->block_size == block_size_alg(alg) && state->digest_size == digest_size_alg(alg))
     _(requires \wrapped(\domain_root(\embedding((uint8_t *)key))))
     _(requires \thread_local_array((uint8_t *)key,klen))
     _(requires sizeof(state->xor_pad) >= state->block_size)
     _(requires sizeof(state->digest_pad) >= state->digest_size)
     _(requires sizeof(state->xor_pad) >= state->block_size)
     _(requires sizeof(state->digest_pad) >= state->digest_size)
-    _(requires state->digestpad.val == (\lambda \natural i; i<state->digest_size? state->digest_pad[i] : (uint8_t)0))
-    _(requires state->digestpad.len == state->digest_size) 
+    //_(requires state->digestpad.val == (\lambda \natural i; i<state->digest_size? state->digest_pad[i] : (uint8_t)0))
+    //_(requires state->digestpad.len == SHA512_DIGEST_LENGTH) 
     _(requires state->alg == alg)
     _(requires state->currently_in_hash_block == 0)
     _(requires state->hash_block_size == 64)
-    _(requires state->block_size == block_size_alg(alg))
-    _(requires state->digest_size == digest_size_alg(alg))
     _(writes \extent(state))
+    _(ensures \unchanged(state->alg))
     _(ensures !\result ==> \wrapped(state))
     _(ensures \result <= 0)
-    _(ensures !\result ==> state->xorpad == repeat((uint8_t)0x5c,state->block_size))
+    _(ensures !\result ==> state->xorpad.val == (\lambda \natural i; i<state->block_size? (uint8_t)0x5c : (uint8_t)0))
     _(ensures !\result ==> hashState(&state->inner,0) == concatenate(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),repeat((uint8_t)0x36,state->block_size)))
     _(ensures !\result ==> hashState(&state->outer,0) == concatenate(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),repeat((uint8_t)0x5c,state->block_size)))
     _(decreases 0)
@@ -241,22 +239,22 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
         state->xor_pad[i] = 0x36;
     }
     _(ghost state->xorpad.val = (\lambda \natural i; i<state->block_size? state->xor_pad[i] : (uint8_t)0))
-    _(ghost state->xorpad.len = state->block_size)
-    _(assert state->xorpad == repeat((uint8_t)0x36,state->block_size))
+    _(ghost state->xorpad.len = 128)
+    //_(assert state->xorpad == repeat((uint8_t)0x36,state->block_size))
     GUARD(s2n_hash_init(&state->inner_just_key, hash_alg));
     _(assert hashState(&state->inner_just_key,0) == repeat((uint8_t)0,0))
     GUARD(s2n_hash_update(&state->inner_just_key, key, klen));
     _(assert hashState(&state->inner_just_key,0) == concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)))
     GUARD(s2n_hash_update(&state->inner_just_key, state->xor_pad, state->block_size));
-    _(assert hashState(&state->inner_just_key,0) == concatenate(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),state->xorpad))
+    //_(assert hashState(&state->inner_just_key,0) == concatenate(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),state->xorpad))
     for (int i = 0; i < state->block_size; i++) 
         _(writes \array_range(state->xor_pad,state->block_size))
         _(invariant \forall int j; j>=0 && j<i ==> state->xor_pad[j]==0x5c){
         state->xor_pad[i] = 0x5c;
     }
     _(ghost state->xorpad.val = (\lambda \natural i; i<state->block_size? state->xor_pad[i] : (uint8_t)0))
-    _(ghost state->xorpad.len = state->block_size)
-    _(assert state->xorpad == repeat((uint8_t)0x5c,state->block_size))
+    _(ghost state->xorpad.len = 128)
+    //_(assert state->xorpad == repeat((uint8_t)0x5c,state->block_size))
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     GUARD(s2n_hash_init(&state->outer, hash_alg));
     _(assert hashState(&state->outer,0) == repeat((uint8_t)0,0))
@@ -271,7 +269,7 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(assert \wrapped_with_deep_domain(&state->outer))
     /* Copy inner_just_key to inner */
     //return 0;
-    _(assert state->xorpad == repeat((uint8_t)0x5c,state->block_size))
+    //_(assert state->xorpad == repeat((uint8_t)0x5c,state->block_size))
     return s2n_hmac_reset(state);
 }
 
@@ -281,16 +279,19 @@ extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, c
     _(requires \thread_local_array((uint8_t *)state->digest_pad, state->digest_size))
     _(requires \thread_local_array((uint8_t *)state->xor_pad, state->digest_size))
     _(requires \thread_local_array((uint8_t *)key,klen))
-    _(requires alg >= 0 && alg <= 8)
+    _(requires alg > 0 && alg <= 8)
     _(writes \extent(state))
     _(ensures \result <= 0)
     _(ensures !\result ==> \wrapped(state))
-    _(ensures !\result ==> state->block_size == block_size_alg(alg))
-    _(ensures !\result ==> state->digest_size == digest_size_alg(alg))
-    _(ensures !\result && klen > state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hmac_to_hash(alg))).val[i]^(uint8_t)0x36)^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
-    _(ensures !\result && klen <= state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36))^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
-    _(ensures !\result && alg && alg<=6 ==> hashState(&state->inner,0) == concatenate(repeat((uint8_t)0,0),state->xorpad))
-    _(ensures !\result && alg && alg<=6  ==> hashState(&state->outer,0) == repeat((uint8_t)0,0))
+    //_(ensures !\result ==> state->block_size == block_size_alg(alg))
+    //_(ensures !\result ==> state->digest_size == digest_size_alg(alg))
+    _(ensures !\result && klen > state->block_size && alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((uint8_t)((hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg))).val[i]^(uint8_t)0x36)^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
+    _(ensures !\result && klen <= state->block_size && alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36))^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
+    _(ensures !\result && klen > state->block_size && alg<=6 ==> hashState(&state->inner,0).val==(\lambda \natural i; i<state->digest_size? (uint8_t)(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)).val[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)) && hashState(&state->inner,0).len == state->block_size)
+    _(ensures !\result && klen <= state->block_size && alg<=6 ==> hashState(&state->inner,0).val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)) && hashState(&state->inner,0).len == state->block_size)
+    _(ensures !\result && alg<=6  ==> hashState(&state->outer,0) == repeat((uint8_t)0,0))
+    _(ensures !\result && alg >=7 && alg <=8 ==> hashState(&state->inner,0) == concatenate(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),repeat((uint8_t)0x36,state->block_size)))
+    _(ensures !\result && alg >=7 && alg <=8  ==> hashState(&state->outer,0) == concatenate(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),repeat((uint8_t)0x5c,state->block_size)))
     _(decreases 0)
 ;
 
@@ -303,6 +304,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     state->hash_block_size = 64; 
     switch (alg) {
     case S2N_HMAC_NONE:
+        _(assert 0)
         break;
     case S2N_HMAC_SSLv3_MD5:
         state->block_size = 48;
@@ -361,37 +363,39 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         return s2n_sslv3_mac_init(state, alg, key, klen);
     }
     GUARD(s2n_hash_init(&state->inner_just_key, hash_alg));
-    _(assert state->alg && state->alg<=6 ==> hashState(&state->inner_just_key,0)==repeat((uint8_t)0,0))
+    _(assert hashState(&state->inner_just_key,0)==repeat((uint8_t)0,0))
     GUARD(s2n_hash_init(&state->outer, hash_alg));
-    _(assert state->alg && state->alg<=6 ==> hashState(&state->outer,0)==repeat((uint8_t)0,0))
+    _(assert hashState(&state->outer,0)==repeat((uint8_t)0,0))
     uint32_t copied = klen;
-    _(ghost state->xorpad.len = state->block_size) //technically, no, but this is the only part we use
+    _(ghost state->xorpad.len = 128) 
     if (klen > state->block_size) {
         _(ghost \state t = \now())
         GUARD(s2n_hash_update(&state->outer, key, klen));
-        _(assert hash_alg && hash_alg<=6 ==> hashState(&state->outer,0) == concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)))
+        _(assert hashState(&state->outer,0) == make_num((uint8_t *)key,klen))
         GUARD(s2n_hash_digest(&state->outer, state->digest_pad, state->digest_size)); 
-        _(ghost state->digestpad.len = state->digest_size)
+        _(ghost state->digestpad.len = SHA512_DIGEST_LENGTH)
         _(ghost state->digestpad.val = (\lambda \natural i; i<state->digest_size? state->digest_pad[i] : (uint8_t)0))
-        _(assert hash_alg && hash_alg<=6 ==> state->digestpad == hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)) //IS THIS NECESSARY?
+        //_(assert state->digestpad == hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)) //IS THIS NECESSARY?
         _(assert state->digest_size ==> state->xor_pad != NULL)
         memcpy/*_check*/(state->xor_pad, state->digest_pad, state->digest_size);
         _(ghost state->xorpad.val = (\lambda \natural i; i<state->digest_size? state->digestpad.val[i] : (uint8_t)0))
-        _(ghost state->xorpad.len = state->block_size)
-        _(assert hash_alg && hash_alg<=6 ==> state->xorpad.val == (\lambda \natural i; i<state->digest_size? hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg).val[i] : (uint8_t)0))
+        _(ghost state->xorpad.len = 128)
+        _(assert state->xorpad.val == (\lambda \natural i; i<state->digest_size? hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg).val[i] : (uint8_t)0))
         //_(assert hash_alg && hash_alg<=6 ==> state->xorpad == concatenate(hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg),repeat((uint8_t)0,(\natural)(state->block_size - state->digest_size))))
         copied = state->digest_size;
     } else {
+        _(ghost state->digestpad.len = SHA512_DIGEST_LENGTH)
+        _(ghost state->digestpad.val = (\lambda \natural i; i<state->digest_size? state->digest_pad[i] : (uint8_t)0))
         _(assert klen ==> state->xor_pad != NULL)
         memcpy/*_check*/(state->xor_pad, key, klen);
         _(ghost state->xorpad.val = (\lambda \natural i; i<klen? ((uint8_t *)(key))[i] : (uint8_t)0))
-        _(ghost state->xorpad.len = state->block_size)
+        _(ghost state->xorpad.len = 128)
         //_(assert state->xorpad == concatenate(make_num((uint8_t *)key,klen),repeat((uint8_t)0,(\natural)(state->block_size-klen))))
     }
     _(ghost \state s = \now())
     //_(assert klen <= state->block_size && state->alg && state->alg<=6 ==> state->xorpad == concatenate(make_num((uint8_t *)key,klen),repeat((uint8_t)0,(\natural)(state->block_size-klen))))
-    _(assert klen <= state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<klen? ((uint8_t *)(key))[i] : (uint8_t)0))
-    _(assert klen > state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val == (\lambda \natural i; i<state->digest_size? hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg).val[i] : (uint8_t)0))
+    _(assert klen <= state->block_size ==> state->xorpad.val==(\lambda \natural i; i<klen? ((uint8_t *)(key))[i] : (uint8_t)0))
+    _(assert klen > state->block_size ==> state->xorpad.val == (\lambda \natural i; i<state->digest_size? hashVal(make_num((uint8_t *)key,klen),hash_alg).val[i] : (uint8_t)0))
     //_(assert klen > state->block_size && state->alg && state->alg<=6 ==> state->xorpad == concatenate(hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg),repeat((uint8_t)0,(\natural)(state->block_size - state->digest_size))))
     for (int i = 0; i < (int) copied; i++) 
         _(writes \array_range(state->xor_pad,copied))
@@ -410,12 +414,13 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(assert \at(s,state->digest_size) == state->digest_size)
     _(assert state->xorpad == xor(\at(s,state->xorpad),concatenate(repeat((uint8_t)0x36,(\natural)copied),repeat((uint8_t)0,(\natural)(state->block_size-copied)))))
     _(assert klen > state->block_size ==> copied == state->digest_size)
-    _(assert klen > state->block_size && state->alg <=6 ==> state->xorpad.val ==(\lambda \natural i; i<state->digest_size? (uint8_t)(\at(s,state->xorpad).val[i]^(uint8_t)0x36) : (uint8_t)0))
-    */_(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
-    _(assert hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg) == \at(s, hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)))
-    _(assert hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg) == \at(s, hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)))
-    _(assert klen > state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)).val[i]^(uint8_t)0x36) : (uint8_t)0))
-    _(assert klen <= state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36) : (uint8_t)0))
+    _(assert klen > state->block_size && state->alg <=6 ==> state->xorpad.val ==(\lambda \natural i; i<state->digest_size? (uint8_t)(\at(s,state->xorpad).val[i]^(uint8_t)0x36) : (uint8_t)0))*/
+    //_(assert make_num((uint8_t *)key,klen) == \at(s, make_num((uint8_t *)key,klen)))
+    //_(assert hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg) == \at(s, hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)))
+    //_(assert hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg) == \at(s, hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)))
+    _(assert make_num((uint8_t *)key,klen) == \at(s, make_num((uint8_t *)key,klen)))
+    _(assert klen > state->block_size ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)).val[i]^(uint8_t)0x36) : (uint8_t)0))
+    _(assert klen <= state->block_size ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36) : (uint8_t)0))
     _(ghost \state s1 = \now())
     for (int i = (int) copied; i < state->block_size; i++) 
         _(writes \array_range(state->xor_pad + copied,state->block_size - copied))
@@ -427,8 +432,13 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     }
     _(ghost state->xorpad.val = (\lambda \natural i; i<state->block_size? state->xor_pad[i] : (uint8_t)0))
     _(ghost \state s15 = \now())
+    _(assert \wrapped_with_deep_domain(&state->outer))
     GUARD(s2n_hash_update(&state->inner_just_key, state->xor_pad, state->block_size));
     _(assert \at(s15,hashState(&state->inner_just_key,0)) == repeat((uint8_t)0,0))
+    _(assert hashState(&state->inner_just_key,0) == make_num(state->xor_pad,state->block_size))
+    _(assert valid(hashState(&state->inner_just_key,0)))
+    _(assert \wrapped_with_deep_domain(&state->inner_just_key))
+    //_(assert \wrapped_with_deep_domain(&state->inner_just_key))
     /*_(assert state->xorpad == make_num(state->xor_pad,state->block_size))
     _(assert state->alg && state->alg<=6 ==> hashState(&state->inner_just_key,0) == concatenate(\at(s15,hashState(&state->inner_just_key,0)),state->xorpad))
     _(assert state->alg && state->alg<=6 ==> hashState(&state->inner_just_key,0) == concatenate(repeat((uint8_t)0,0),state->xorpad))
@@ -436,10 +446,14 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     //_(assert state->xorpad == xor(\at(s,state->xorpad),repeat((uint8_t)0x36,state->xorpad.len)))
     // 0x36 xor 0x5c == 0x6a
     //_(assert klen > state->block_size ==> copied == state->digest_size)
-    _(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
-    _(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s1, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
-    _(assert klen > state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)).val[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
-    _(assert klen <= state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
+    //_(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
+    _(assert \wrapped_with_deep_domain(&state->inner_just_key))
+    _(assert make_num((uint8_t *)key,klen) == \at(s1, make_num((uint8_t *)key,klen)))
+    _(assert klen > state->block_size ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)).val[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
+    _(assert klen <= state->block_size ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
+    _(assert klen > state->block_size ==> hashState(&state->inner_just_key,0).val==(\lambda \natural i; i<state->digest_size? (uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)).val[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
+    _(assert klen <= state->block_size ==> hashState(&state->inner_just_key,0).val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
+    _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     for (int i = 0; i < state->block_size; i++) 
     _(writes \array_range(state->xor_pad,state->block_size))
     _(invariant i>=0 && i <= state->block_size)
@@ -458,13 +472,19 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(assert state->xorpad == xor(\at(s,state->xorpad),repeat((uint8_t)(0x36 ^ (0x36 ^ 0x5c)),\at(s,state->xorpad).len)))
     _(assert state->xorpad == xor(\at(s,state->xorpad),repeat((uint8_t)0x5c,state->xorpad.len)))
     _(assert hmac_to_hash(state->alg) == S2N_HASH_MD5 ==> valid((&(&state->inner_just_key)->hash_ctx.md5)->val))
-    */_(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
+    *//*_(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
     _(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s1, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
-    _(assert concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)) == \at(s2, concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen))))
-    _(assert klen > state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((uint8_t)((hashVal(concatenate(repeat((uint8_t)0,0),make_num((uint8_t *)key,klen)),hash_alg)).val[i]^(uint8_t)0x36)^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
-    _(assert klen <= state->block_size && state->alg && state->alg<=6 ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36))^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
-    return 0;
-    //return s2n_hmac_reset(state);
+    */_(assert make_num((uint8_t *)key,klen) == \at(s2, make_num((uint8_t *)key,klen)))
+    _(assert klen > state->block_size ==> state->xorpad.val==(\lambda \natural i; i<state->digest_size? (uint8_t)((uint8_t)(hashVal(make_num((uint8_t *)key,klen),hash_alg).val[i]^(uint8_t)0x36)^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
+    _(assert klen <= state->block_size ==> state->xorpad.val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36))^(uint8_t)0x6a) : (i<state->block_size? (uint8_t)(((uint8_t)0x36)^(uint8_t)0x6a) : (uint8_t)0)))
+    _(assert hashState(&state->inner_just_key,0) == \at(s2,hashState(&state->inner_just_key,0)))
+    _(assert klen > state->block_size ==> hashState(&state->inner_just_key,0).val==(\lambda \natural i; i<state->digest_size? (uint8_t)(hashVal(make_num((uint8_t *)key,klen),hash_alg).val[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
+    _(assert klen <= state->block_size ==> hashState(&state->inner_just_key,0).val==(\lambda \natural i; i<klen? (uint8_t)(((uint8_t *)(key))[i]^(uint8_t)0x36) : (i<state->block_size? (uint8_t)0x36 : (uint8_t)0)))
+    _(assert \wrapped(\domain_root(\embedding((uint8_t *)key))))
+    _(assert state->digestpad.len == SHA512_DIGEST_LENGTH)
+    _(assert state->digestpad.val == (\lambda \natural i; i<state->digest_size? state->digest_pad[i] : (uint8_t)0))
+        //return 0;
+    return s2n_hmac_reset(state);
 }
 
 extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
@@ -730,24 +750,22 @@ extern int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(requires \mutable(state) && \extent_mutable(&state->inner) && \wrapped(&state->inner_just_key) && \wrapped(&state->outer))
     _(requires (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
     _(requires (&state->outer)->alg == hmac_to_hash(state->alg))
-    _(requires state->alg>=0 && state->alg<=8)
+    _(requires state->alg && state->alg<=8)
     _(requires state->hash_block_size >= 9)
     _(requires state->digest_size == digest_size_alg(state->alg))
-    _(requires state->block_size != 0)
-    _(requires sizeof(state->xor_pad) >= state->block_size)
+    //_(requires state->block_size != 0)
+    _(requires state->block_size == block_size_alg(state->alg))
     _(requires state->xorpad.val == (\lambda \natural i; i<state->block_size? state->xor_pad[i]:(uint8_t)0))
-    _(requires state->xorpad.len == state->block_size)
-    _(requires valid(state->xorpad))
+    _(requires state->xorpad.len == 128)
     _(requires state->block_size == block_size_alg(state->alg))
     _(requires state->digest_size == digest_size_alg(state->alg))
     _(writes \span(state), \extent(&state->inner), &state->inner_just_key, &state->outer)
     _(requires state->alg ==> valid(hashState(&state->inner_just_key,0)))
     _(requires valid(state->digestpad))
-    _(requires state->digestpad.val == (\lambda \natural i; i<state->digest_size? state->digest_pad[i]:(uint8_t)0))
-    _(requires state->digestpad.len == state->digest_size)
     _(ensures state->alg ==> hashState(&state->inner,0)== \old(hashState(&state->inner_just_key,0)) && \unchanged((hashState(&state->outer,0))))
     _(ensures \unchanged(state->alg))
     _(ensures \unchanged(state->block_size))
+    _(ensures \unchanged(state->digest_size))
     _(ensures \wrapped(state))
     _(ensures \result == 0)
     _(ensures \unchanged(state->xorpad) && \unchanged(state->digestpad))
@@ -859,6 +877,8 @@ break;
     _(wrap &state->inner_just_key)
     _(wrap &state->inner)
     _(ghost state->\owns = {&state->inner_just_key, &state->inner, &state->outer})
+    _(ghost state->digestpad.val = (\lambda \natural i; i<state->digest_size? state->digest_pad[i]:(uint8_t)0))
+    _(ghost state->digestpad.len = SHA512_DIGEST_LENGTH)
     _(wrap state)
     return 0;
 }
@@ -893,16 +913,12 @@ extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     _(requires \wrapped(from))
     _(requires \extent_mutable(to))
     _(requires from != to)
-    _(requires to->hash_block_size >= 9)
-    _(requires to->block_size != 0)
-    _(requires to->alg<=6)
     _(writes \extent(to), from)
     _(ensures \wrapped(to))
     _(ensures \result <= 0)
-    _(ensures from->alg ==1 ==> hashState(&to->outer,0) == \old(hashState(&from->outer,0)))
-    _(ensures from->alg && from->alg <= 6 ==> hashState(&to->inner,0) == \old(hashState(&from->inner,0)))
-    _(ensures from->alg && from->alg <= 6 ==> hashState(&to->inner_just_key,0) == \old(hashState(&from->inner_just_key,0)))
-    _(ensures from->alg && from->alg <= 6 ==> hashState(&to->outer,0) == \old(hashState(&from->outer,0)))
+    _(ensures hashState(&to->inner,0) == \old(hashState(&from->inner,0)))
+    _(ensures hashState(&to->inner_just_key,0) == \old(hashState(&from->inner_just_key,0)))
+    _(ensures hashState(&to->outer,0) == \old(hashState(&from->outer,0)))
 ; 
 
 int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
@@ -911,14 +927,9 @@ int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     //memcpy_check(to, from, sizeof(struct s2n_hmac_state));
     hmac_state_destroy(from);
     *to = *from; //USED ADDED IN PLACE OF MEMCPY
-    switch((&to->inner)->alg){
+    _(ghost switch(hmac_to_hash(to->alg)){
     case S2N_HASH_NONE:
-        _(wrap &(&to->inner_just_key)->hash_ctx)  
-        _(ghost (&to->inner_just_key)->\owns = {&(&to->inner_just_key)->hash_ctx})
-        _(wrap &(&to->inner)->hash_ctx)  
-        _(ghost (&to->inner)->\owns = {&(&to->inner)->hash_ctx})
-        _(wrap &(&to->outer)->hash_ctx)  
-        _(ghost (&to->outer)->\owns = {&(&to->outer)->hash_ctx})
+        _(assert 0)
     break;
     case S2N_HASH_MD5: 
         _(wrap &(&to->inner_just_key)->hash_ctx.md5)  
@@ -986,7 +997,7 @@ int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
         _(wrap &(&to->outer)->hash_ctx)  
         _(ghost (&to->outer)->\owns = {&(&to->outer)->hash_ctx.sha512, &(&to->outer)->hash_ctx})
     break;
-    default: _(assert 0)}
+    default: _(assert 0)})
     _(wrap &to->inner_just_key)
     _(wrap &to->inner)
     _(wrap &to->outer)
