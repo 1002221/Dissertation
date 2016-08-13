@@ -593,6 +593,7 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
 
 extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state))
+    _(maintains \thread_local_array((uint8_t *)outt,size))
     _(requires size == alg_digest_size(state->alg))
     _(writes state, \array_range(_(uint8_t *)outt,size))
     _(ensures \result <= 0)
