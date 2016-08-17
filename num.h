@@ -17,7 +17,7 @@ _(ensures valid(\result))
 
 _(def \bool valid(Num n1)
 {
-    return (\forall \natural i; i>= n1.len ==> n1.val[i]==0);
+    return (\forall \natural i; i>= n1.len ==> n1.val[i]==(uint8_t)0);
 })
 
 _(def \bool xor_comm(Num n1, Num n2)
@@ -30,9 +30,11 @@ _(ensures \result == 1)
 )
 
 _(def Num make_num(uint8_t *a, size_t b)
+_(ensures \forall \natural i; \result.val[i] == a[i])
+_(ensures \forall \natural i; i>=b ==> a[i]==0)
 {
     Num n;
-    return n/{.val = (\lambda \natural i; i<b? a[i] : (uint8_t)0), .len=0};
+    return n/{.val = (\lambda \natural i; i<b? a[i] : (uint8_t)0), .len=b};
 })
 
 _(def Num repeat(uint8_t a, \natural size)
@@ -57,7 +59,7 @@ _(def Num concatenate(Num n1, Num n2)
 _(requires valid(n1) && valid(n2))
 _(ensures valid(\result))
 {
-    return n1 / {.val = (\lambda \natural i; i<n1.len? n1.val[i] : n2.val[i+n1.len]), .len = n1.len+n2.len};
+    return n1 / {.val = (\lambda \natural i; i<n1.len? n1.val[i] : n2.val[i-n1.len]), .len = n1.len+n2.len};
 })
 
 _(def void concatenate_ass(Num n1, Num n2, Num n3)
@@ -80,15 +82,11 @@ _(ensures a^b == (a + b)%2)
 {})
 
 _(def Num num_resize(Num n1, \natural size)
-_(maintains valid(n1))
+_(ensures valid(n1))
 {
-    if(size < n1.len)
+    if(size <= n1.len)
     {
         return n1/{.val = (\lambda \natural i; i<size? n1.val[i] : (uint8_t)0), .len = size};
-    }
-    else if(size == n1.len)
-    {
-        return n1;
     }
     else
     {
