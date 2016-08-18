@@ -59,7 +59,7 @@ _(def Num concatenate(Num n1, Num n2)
 _(requires valid(n1) && valid(n2))
 _(ensures valid(\result))
 {
-    return n1 / {.val = (\lambda \natural i; i<n1.len? n1.val[i] : n2.val[i-n1.len]), .len = n1.len+n2.len};
+    return n1 / {.val = (\lambda \natural i; i<n1.len? n1.val[i] : (i<n1.len+n2.len? n2.val[i-n1.len] : (uint8_t)0)), .len = n1.len+n2.len};
 })
 
 _(def void concatenate_ass(Num n1, Num n2, Num n3)
