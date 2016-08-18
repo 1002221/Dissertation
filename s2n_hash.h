@@ -9,6 +9,8 @@ typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_
 } s2n_hash_algorithm; 
 
 _(ghost _(pure) Num hashVal(Num state, s2n_hash_algorithm alg)
+  _(ensures \result.len == alg_digest_size(alg))
+  //_(ensures valid(\result))
   _(decreases 0))
 
 #define MD5_LONG unsigned int
@@ -394,6 +396,24 @@ int hash_state_destroy(struct s2n_hash_state *s)
     _(decreases 0)
 ;
 
+int hash_state_destroy2(struct s2n_hash_state *s)
+    _(requires \extent_mutable(s))
+    _(writes \extent(s))
+    _(ensures \extent_fresh(s))
+    _(ensures \extent_mutable(s))
+    _(ensures \unchanged(s->alg))
+    _(ensures s->alg ==> \unchanged(hashState(s,0)) && valid(hashState(s,0)))
+    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \unchanged(hashState(s,1)) && valid(hashState(s,1)))
+    _(ensures s->alg == S2N_HASH_MD5 ==> \union_active(&s->hash_ctx.md5))
+    _(ensures s->alg == S2N_HASH_SHA1 ==> \union_active(&s->hash_ctx.sha1))
+    _(ensures s->alg == S2N_HASH_SHA224 ==> \union_active(&s->hash_ctx.sha224))
+    _(ensures s->alg == S2N_HASH_SHA256 ==> \union_active(&s->hash_ctx.sha256))
+    _(ensures s->alg == S2N_HASH_SHA384 ==> \union_active(&s->hash_ctx.sha384))
+    _(ensures s->alg == S2N_HASH_SHA512 ==> \union_active(&s->hash_ctx.sha512))
+    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \union_active(&s->hash_ctx.md5_sha1))
+    _(decreases 0)
+;
+
 int make_state_extent_mutable(struct s2n_hash_state *s)
     _(requires \wrapped(s))
     _(writes s)
@@ -450,19 +470,9 @@ extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
     _(requires alg>= 0 && alg <= 7)
     _(requires \extent_mutable(state))
     _(writes \extent(state))
-    _(ensures state->alg == alg)
     _(ensures \wrapped(state))
+    _(ensures state->alg == alg)
     _(ensures \result <= 0)
-    _(ensures !\result ==> &state->hash_ctx \in state->\owns)
-    _(ensures !\result && alg == S2N_HASH_MD5 ==> &state->hash_ctx.md5 \in state->\owns)
-    _(ensures !\result && alg == S2N_HASH_SHA1 ==> &state->hash_ctx.sha1 \in state->\owns)
-    _(ensures !\result && alg == S2N_HASH_SHA224 ==> &state->hash_ctx.sha224 \in state->\owns)
-    _(ensures !\result && alg == S2N_HASH_SHA256 ==> &state->hash_ctx.sha256 \in state->\owns)
-    _(ensures !\result && alg == S2N_HASH_SHA384 ==> &state->hash_ctx.sha384 \in state->\owns)
-    _(ensures !\result && alg == S2N_HASH_SHA512 ==> &state->hash_ctx.sha512 \in state->\owns)
-    _(ensures !\result && alg == S2N_HASH_MD5_SHA1 ==> &state->hash_ctx.md5_sha1 \in state->\owns &&
-        &state->hash_ctx.md5_sha1.sha1 \in state->\owns &&
-        &state->hash_ctx.md5_sha1.md5 \in state->\owns)
     _(ensures hashState(state,0) == repeat((uint8_t)0,0))
     _(ensures alg == S2N_HASH_MD5_SHA1 ==> hashState(state,1) == repeat((uint8_t)0,0))
     _(decreases 0)
