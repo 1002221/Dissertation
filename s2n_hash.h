@@ -396,31 +396,6 @@ int hash_state_destroy(struct s2n_hash_state *s)
     _(decreases 0)
 ;
 
-int hash_state_destroy2(struct s2n_hash_state *s)
-    _(requires \extent_mutable(s))
-    _(writes \extent(s))
-    _(ensures \extent_fresh(s))
-    _(ensures \extent_mutable(s))
-    _(ensures \unchanged(s->alg))
-    _(ensures s->alg ==> \unchanged(hashState(s,0)) && valid(hashState(s,0)))
-    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \unchanged(hashState(s,1)) && valid(hashState(s,1)))
-    _(ensures s->alg == S2N_HASH_MD5 ==> \union_active(&s->hash_ctx.md5))
-    _(ensures s->alg == S2N_HASH_SHA1 ==> \union_active(&s->hash_ctx.sha1))
-    _(ensures s->alg == S2N_HASH_SHA224 ==> \union_active(&s->hash_ctx.sha224))
-    _(ensures s->alg == S2N_HASH_SHA256 ==> \union_active(&s->hash_ctx.sha256))
-    _(ensures s->alg == S2N_HASH_SHA384 ==> \union_active(&s->hash_ctx.sha384))
-    _(ensures s->alg == S2N_HASH_SHA512 ==> \union_active(&s->hash_ctx.sha512))
-    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \union_active(&s->hash_ctx.md5_sha1))
-    _(decreases 0)
-;
-
-int make_state_extent_mutable(struct s2n_hash_state *s)
-    _(requires \wrapped(s))
-    _(writes s)
-    _(ensures \extent_mutable(s))
-    _(ensures \unchanged(s->alg))
-;
-
 extern int s2n_hash_digest_size(s2n_hash_algorithm alg)
     _(requires 0 <= alg && alg <= 7)
     _(ensures alg == S2N_HASH_NONE ==> \result == 0)
