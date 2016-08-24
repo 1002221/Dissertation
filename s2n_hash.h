@@ -16,7 +16,6 @@ _(def \bool is_valid_hash(s2n_hash_algorithm alg)
 
 _(ghost _(pure) Num hashVal(Num state, s2n_hash_algorithm alg)
   _(ensures \result.len == alg_digest_size(alg))
-  //_(ensures valid_num(\result))
   _(decreases 0))
 
 #define MD5_LONG unsigned int
@@ -410,6 +409,7 @@ typedef _(dynamic_owns) struct s2n_hash_state {
         }  md5_sha1;
     } hash_ctx;
     _(ghost Num hashState)
+    _(invariant valid_num(hashState))
     _(ghost \bool valid)
     _(invariant is_valid_hash(alg))
     _(invariant alg == S2N_HASH_NONE ==> hashState == repeat(0x0,0))
@@ -486,15 +486,26 @@ _(def Num hashState(struct s2n_hash_state *s, int a) {
     else return repeat(0x0,0);
 })
 
+extern int s2n_hash_init_invalid(struct s2n_hash_state *state, s2n_hash_algorithm alg)
+    _(requires is_valid_hash(alg))
+   // _(requires \extent_mutable(state))
+    _(writes \extent(state))
+    _(ensures \wrapped(state))
+    _(ensures state->alg == alg)
+    _(ensures \result == 0)
+    _(ensures state->hashState == repeat(0x0,0))
+    _(ensures !state->valid)
+    _(decreases 0)
+;
+
 extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
     _(requires is_valid_hash(alg))
    // _(requires \extent_mutable(state))
     _(writes \extent(state))
     _(ensures \wrapped(state))
     _(ensures state->alg == alg)
-    _(ensures \result <= 0)
-    _(ensures hashState(state,0) == repeat(0x0,0))
-    _(ensures alg == S2N_HASH_MD5_SHA1 ==> hashState(state,1) == repeat(0x0,0))
+    _(ensures \result == 0)
+    _(ensures state->hashState == repeat(0x0,0))
     _(ensures state->valid)
     _(decreases 0)
 ;
@@ -589,6 +600,7 @@ extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_
     _(writes state)
     _(ensures \unchanged(state->alg))
     _(ensures state->alg ==> state->hashState == concatenate(\old(state->hashState),make_num((uint8_t *)in,size)))
+    _(ensures !state->alg ==> \unchanged(state->hashState))
     _(ensures \result == 0)
     _(decreases 0)
 ;
@@ -653,7 +665,8 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
     _(ensures \wrapped(state))
     _(ensures state->alg && state->alg != S2N_HASH_MD5_SHA1 ==> make_num((uint8_t *)outt,size) == hashVal(\old(state->hashState),state->alg))
     _(ensures state->alg == S2N_HASH_MD5_SHA1 ==> make_num((uint8_t *)outt,size) == concatenate(hashVal(\old(state->hashState),S2N_HASH_MD5),hashVal(\old(state->hashState),S2N_HASH_SHA1)))
-    _(ensures state->alg ==> state->hashState == repeat(0x0,0))
+    _(ensures state->hashState == repeat(0x0,0))
+    _(ensures !state->alg ==> make_num((uint8_t *)outt,size) == \old(make_num((uint8_t *)outt,size)))
     _(ensures !state->valid)
     _(ensures \result == 0)
     _(decreases 0)
@@ -750,7 +763,8 @@ extern int s2n_hash_reset(struct s2n_hash_state *state)
     _(ensures \unchanged(state->alg))
     _(ensures \wrapped(state))
     _(ensures state->valid)
-    _(ensures \result <= 0)
+    _(ensures state->hashState == repeat(0x0,0))
+    _(ensures \result == 0)
 ;
 
 int s2n_hash_reset(struct s2n_hash_state *state)
