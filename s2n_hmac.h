@@ -535,6 +535,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
 
     _(ghost xor_ass())
     _(ghost \state t = \now())
+    
     for (int i = 0; i < (int) copied; i++) 
         _(writes \array_range(state->xor_pad,copied))
         _(invariant i>= 0 && i<= (int)copied)
@@ -550,7 +551,9 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         _(invariant i>=(int)copied && i<= state->block_size){
         state->xor_pad[i] = 0x36;
     }
+    
     s2n_hash_update(&state->inner_just_key, state->xor_pad, state->block_size);
+
     for (int i = 0; i < state->block_size; i++) 
     _(writes \array_range(state->xor_pad,state->block_size))
     _(invariant i>=0 && i <= state->block_size)
@@ -559,8 +562,10 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     {
         state->xor_pad[i] ^= 0x6a;
     }
+    
     _(assert make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(\at(t,make_num(state->xor_pad,copied)),block_size_alg(alg)),repeat((uint8_t)(0x36^0x6a),block_size_alg(alg))))
     _(assert make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(\at(t,make_num(state->xor_pad,copied)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
+    
     _(assert make_num((uint8_t *)key,klen) == \at(t,make_num((uint8_t *)key,klen)))
     _(assert alg && klen>block_size_alg(alg) ==> make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
     _(assert !alg && klen>block_size_alg(alg) ==> make_num(state->xor_pad,block_size_alg(alg)) == repeat(0x5c,block_size_alg(alg)))
@@ -568,6 +573,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(assert alg && klen>block_size_alg(alg) ==> (&state->inner_just_key)->hashState == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(state->alg)),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
     _(assert !alg ==> (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(assert alg && klen<=block_size_alg(alg) ==> (&state->inner_just_key)->hashState == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
+    
     _(ghost state->key = make_num((uint8_t *)key,klen))
     _(ghost state->xorpad = make_num(state->xor_pad,block_size_alg(alg)))
     _(ghost state->digestpad = make_num(state->digest_pad,digest_size_alg(alg)))
@@ -585,7 +591,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(maintains alg && klen<=block_size_alg(alg) ==> (&state->inner_just_key)->hashState == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
     _(ensures alg && klen>block_size_alg(alg) ==> (&state->inner)->hashState == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
     _(ensures !alg ==> (&state->inner)->hashState == repeat(0x0,0))
-    _(ensures klen<=block_size_alg(alg) ==> (&state->inner)->hashState == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg)))) 
+    _(ensures alg && klen<=block_size_alg(alg) ==> (&state->inner)->hashState == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg)))) 
     _(writes &state->inner_just_key,&state->inner)
     {
         _(ghost \state t = \now())
@@ -593,6 +599,9 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         _(assume make_num((uint8_t*)key,klen) == \at(t,make_num((uint8_t*)key,klen)))
         _(ghost hash_state_destroy(&state->inner))
         _(assume make_num((uint8_t*)key,klen) == \at(t,make_num((uint8_t*)key,klen)))
+/*NOTE: IN THE ORIGINAL CODE, THE FUNCTION RETURNS S2N_HMAC_RESET. AS ALL THAT FUNCTION DOES IS COPY S2N_HMAC_INNER_JUST_KEY
+TO S2N_HMAC_INNER, WE HAVE COPIED THAT COMMAND AT THE END OF THIS FUNCTION TO AVOID THE EXTREMELY LENGTHY PRECONDITIONS
+THAT WOULD HAVE RESULTED.*/
         state->inner = state->inner_just_key;
         _(assume make_num((uint8_t*)key,klen) == \at(t,make_num((uint8_t*)key,klen)))
         _(ghost wrap_hash_state((&state->inner)))
@@ -608,7 +617,6 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     return 0;
 }
   
-//16:18
 extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
     _(maintains \wrapped(state))
     _(maintains state->valid)
