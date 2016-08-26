@@ -580,7 +580,8 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(assert klen<=block_size_alg(alg) ==> make_num(state->xor_pad,block_size_alg(alg)) == 
         xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
     _(assert alg && klen>block_size_alg(alg) ==> (&state->inner_just_key)->hashState == 
-        xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(state->alg)),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
+        xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(state->alg)),block_size_alg(alg)),
+        repeat(0x36,block_size_alg(alg))))
     _(assert !alg ==> (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(assert alg && klen<=block_size_alg(alg) ==> (&state->inner_just_key)->hashState == 
         xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
@@ -692,7 +693,8 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(ensures \result <= 0)
     _(ensures !\result ==> make_num((uint8_t *)outt,size) == 
         hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
-        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
+        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),
+        hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
     _(ensures \unchanged(state->alg))
     _(ensures !\result ==> !state->valid)
     _(ensures \unchanged(state->key))
@@ -745,11 +747,17 @@ extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t si
     _(ensures \unchanged(state->alg))
     _(ensures !\result && is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
         hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
-        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
+        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),
+        hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
     _(ensures !\result && state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
+        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,
+        hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),
+        hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),
+        repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
     _(ensures !\result && state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(state->key,state->block_size),repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
+        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
+        repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(state->key,state->block_size),
+        repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
     _(ensures !\result && !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
     _(ensures \unchanged(state->key))
     _(ensures \unchanged(state->message))
@@ -800,13 +808,17 @@ extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, 
     _(writes state, \array_range(_(uint8_t *)outt,size))
     _(ensures !\result && is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
         hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
-        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
+        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),\old(state->message)),
+        hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
     _(ensures !\result && state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),
-        hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
+        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,
+        hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),
+        hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),
+        repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
     _(ensures !\result && state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),repeat(0x5c,state->block_size)),
-        hashVal(concatenate(xor(num_resize(state->key,state->block_size),repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
+        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
+        repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(state->key,state->block_size),
+        repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
     _(ensures !\result && !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
     _(ensures \result <= 0)   
     ;
@@ -820,8 +832,10 @@ int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *o
     _(assert \inv(state))
     //_(assert (&state->inner)->hashState == repeat(0x0,0))
     _(assert  state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),repeat(0x5c,state->block_size)),
-        hashVal(concatenate(xor(num_resize(state->key,state->block_size),repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
+        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
+        repeat(0x5c,state->block_size)),
+        hashVal(concatenate(xor(num_resize(state->key,state->block_size),repeat(0x36,state->block_size)),
+        state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
     _(assert !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
     
     /* If there were 9 or more bytes of space left in the current hash block
