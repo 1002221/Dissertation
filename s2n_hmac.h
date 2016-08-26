@@ -301,7 +301,8 @@ _(def uint16_t block_size_alg(s2n_hmac_algorithm alg)
 
 _(def uint16_t hash_block_size_alg(s2n_hmac_algorithm alg) 
 { 
-    if (alg == S2N_HMAC_NONE || alg == S2N_HMAC_MD5 || alg == S2N_HMAC_SHA1 || alg == S2N_HMAC_SHA224 || alg == S2N_HMAC_SHA256 || alg == S2N_HMAC_SSLv3_MD5 || alg == S2N_HMAC_SSLv3_SHA1) return 64; 
+    if (alg == S2N_HMAC_NONE || alg == S2N_HMAC_MD5 || alg == S2N_HMAC_SHA1 || alg == S2N_HMAC_SHA224 || alg == S2N_HMAC_SHA256 || 
+        alg == S2N_HMAC_SSLv3_MD5 || alg == S2N_HMAC_SSLv3_SHA1) return 64; 
     if (alg == S2N_HMAC_SHA384 || alg == S2N_HMAC_SHA512) return 128; 
     else return 64; 
 })
@@ -532,11 +533,11 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         memcpy(state->xor_pad, key, klen); //USER-ADDED
     }
     
-    _(assert state->alg && klen>state->block_size ==> make_num(state->xor_pad,copied) == hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)))
+    _(assert state->alg && klen>state->block_size ==> 
+            make_num(state->xor_pad,copied) == hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)))
     _(assert !state->alg && klen>state->block_size ==> make_num(state->xor_pad,copied) == repeat(0x0,0))
     _(assert klen<=state->block_size ==> make_num(state->xor_pad,copied) == make_num((uint8_t *)key,klen))
 
-    _(ghost xor_ass())
     _(ghost \state t = \now())
     
     for (int i = 0; i < (int) copied; i++) 
@@ -566,8 +567,10 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         state->xor_pad[i] ^= 0x6a;
     }
     
-    _(assert make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(\at(t,make_num(state->xor_pad,copied)),block_size_alg(alg)),repeat((uint8_t)(0x36^0x6a),block_size_alg(alg))))
-    _(assert make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(\at(t,make_num(state->xor_pad,copied)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
+    _(assert make_num(state->xor_pad,block_size_alg(alg)) == 
+        xor(num_resize(\at(t,make_num(state->xor_pad,copied)),block_size_alg(alg)),repeat((uint8_t)(0x36^0x6a),block_size_alg(alg))))
+    _(assert make_num(state->xor_pad,block_size_alg(alg)) == 
+        xor(num_resize(\at(t,make_num(state->xor_pad,copied)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
     
     _(assert make_num((uint8_t *)key,klen) == \at(t,make_num((uint8_t *)key,klen)))
     _(assert alg && klen>block_size_alg(alg) ==> make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
