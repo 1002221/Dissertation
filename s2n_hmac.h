@@ -573,12 +573,17 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         xor(num_resize(\at(t,make_num(state->xor_pad,copied)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
     
     _(assert make_num((uint8_t *)key,klen) == \at(t,make_num((uint8_t *)key,klen)))
-    _(assert alg && klen>block_size_alg(alg) ==> make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
-    _(assert !alg && klen>block_size_alg(alg) ==> make_num(state->xor_pad,block_size_alg(alg)) == repeat(0x5c,block_size_alg(alg)))
-    _(assert klen<=block_size_alg(alg) ==> make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
-    _(assert alg && klen>block_size_alg(alg) ==> (&state->inner_just_key)->hashState == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(state->alg)),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
+    _(assert alg && klen>block_size_alg(alg) ==> 
+        make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
+    _(assert !alg && klen>block_size_alg(alg) ==> 
+        make_num(state->xor_pad,block_size_alg(alg)) == repeat(0x5c,block_size_alg(alg)))
+    _(assert klen<=block_size_alg(alg) ==> 
+        make_num(state->xor_pad,block_size_alg(alg)) == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x5c,block_size_alg(alg))))
+    _(assert alg && klen>block_size_alg(alg) ==> 
+        (&state->inner_just_key)->hashState == xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(state->alg)),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
     _(assert !alg ==> (&state->inner_just_key)->hashState == repeat(0x0,0))
-    _(assert alg && klen<=block_size_alg(alg) ==> (&state->inner_just_key)->hashState == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
+    _(assert alg && klen<=block_size_alg(alg) ==> 
+        (&state->inner_just_key)->hashState == xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
     
     _(ghost state->key = make_num((uint8_t *)key,klen))
     _(ghost state->xorpad = make_num(state->xor_pad,block_size_alg(alg)))
