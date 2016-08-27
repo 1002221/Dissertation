@@ -144,7 +144,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         break;
     case S2N_HASH_MD5:
         //eq_check(size, MD5_DIGEST_LENGTH);
-        _(assert size == MD5_DIGEST_LENGTH)
+        _(assert size == MD5_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = MD5_Final(outt, &state->hash_ctx.md5);
         _(wrap &state->hash_ctx)
@@ -153,7 +153,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         break;
     case S2N_HASH_SHA1:
         //eq_check(size, SHA_DIGEST_LENGTH);
-        _(assert size == SHA_DIGEST_LENGTH)
+        _(assert size == SHA_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA1_Final(outt, &state->hash_ctx.sha1);
         _(wrap &state->hash_ctx)
@@ -162,7 +162,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         break;
     case S2N_HASH_SHA224:
         //eq_check(size, SHA224_DIGEST_LENGTH);
-        _(assert size == SHA224_DIGEST_LENGTH)
+        _(assert size == SHA224_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA224_Final(outt, &state->hash_ctx.sha224);
         _(wrap &state->hash_ctx)
@@ -171,7 +171,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         break;
     case S2N_HASH_SHA256:
         //eq_check(size, SHA256_DIGEST_LENGTH);
-        _(assert size == SHA256_DIGEST_LENGTH)
+        _(assert size == SHA256_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA256_Final(outt, &state->hash_ctx.sha256);
         _(wrap &state->hash_ctx)
@@ -180,7 +180,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         break;
     case S2N_HASH_SHA384:
         //eq_check(size, SHA384_DIGEST_LENGTH);
-        _(assert size == SHA384_DIGEST_LENGTH)
+        _(assert size == SHA384_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA384_Final(outt, &state->hash_ctx.sha384);
         _(wrap &state->hash_ctx)
@@ -189,7 +189,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         break;
     case S2N_HASH_SHA512:
         //eq_check(size, SHA512_DIGEST_LENGTH);
-        _(assert size == SHA512_DIGEST_LENGTH)
+        _(assert size == SHA512_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA512_Final(outt, &state->hash_ctx.sha512);
         _(wrap &state->hash_ctx)
@@ -198,7 +198,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         break;
     case S2N_HASH_MD5_SHA1:
         //eq_check(size, MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH);
-        _(assert size == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
+        _(assert size == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         r = SHA1_Final2(((uint8_t *) outt) + MD5_DIGEST_LENGTH, &state->hash_ctx.md5_sha1.sha1);
         r &= MD5_Final2(outt, &state->hash_ctx.md5_sha1.md5);
         _(ghost state->hashState = (&state->hash_ctx.md5_sha1.sha1)->val)
@@ -229,8 +229,8 @@ int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(assert \wrapped_with_deep_domain(from))
     _(ghost hash_state_destroy(from))
     _(assert sizeof(struct s2n_hash_state) ==> to != NULL)
-    //memcpy/*_check*/(to, from, sizeof(struct s2n_hash_state));
-    *to = *from; //USER ADDED 
+    *to = *from; //USER ADDED IN PLACE OF MEMCPY
+    //memcpy_check(to, from, sizeof(struct s2n_hash_state));
     if(from->alg == S2N_HASH_NONE) {
         _(wrap &to->hash_ctx)
         _(ghost to->\owns = {&to->hash_ctx})
