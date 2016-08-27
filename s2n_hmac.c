@@ -10,9 +10,9 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(requires state->key == make_num((uint8_t *)key,klen))
     _(writes \extent(state))
     _(ensures \unchanged(state->alg))
-    _(ensures !\result ==> \wrapped(state))
-    _(ensures !\result ==> state->message == repeat(0x0,0))
-    _(ensures \result <= 0)
+    _(ensures \wrapped(state))
+    _(ensures state->message == repeat(0x0,0))
+    _(ensures \result == 0)
     _(ensures \unchanged(state->key))
     _(ensures state->valid)
     _(ensures state->real)
@@ -307,13 +307,13 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(requires is_sslv3(state->alg))
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
     _(writes state, \array_range(_(uint8_t *)outt, size)) 
-    _(ensures \result <= 0)
-    _(ensures !\result ==> make_num((uint8_t *)outt,size) == 
+    _(ensures \result == 0)
+    _(ensures make_num((uint8_t *)outt,size) == 
         hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
         hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),
         hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
     _(ensures \unchanged(state->alg))
-    _(ensures !\result ==> !state->valid)
+    _(ensures !state->valid)
     _(ensures \unchanged(state->key))
     _(ensures \unchanged(state->message))
 {
@@ -343,7 +343,6 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(ensures (&state->inner)->alg == (&state->outer)->alg)
     _(maintains (&state->outer)->hashState == concatenate(state->key,repeat(0x5c,state->block_size)))
     _(maintains !state->alg ==> (&state->outer)->hashState == repeat(0x0,0))
-    //_(maintains valid_num((&state->outer)->hashState)) //MARKED AS UNREACHABLE
     _(writes &state->outer,&state->inner)
     _(ensures (&state->inner)->hashState == (&state->outer)->hashState)
     _(ensures (&state->inner)->valid == (&state->outer)->valid)
