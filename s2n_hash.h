@@ -573,7 +573,7 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
     _(requires size == alg_digest_size(state->alg))
     _(requires state->valid)
     _(writes state, \array_range(_(uint8_t *)outt,size))
-    _(ensures \result <= 0)
+    _(ensures \result == 0)
     _(ensures \unchanged(state->alg))
     _(ensures \wrapped(state))
     _(ensures state->alg && state->alg != S2N_HASH_MD5_SHA1 ==> make_num((uint8_t *)outt,size) == 
@@ -606,10 +606,10 @@ extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(requires from->valid)
     _(writes \extent(to),from)
     _(ensures to->hashState == from->hashState)
-    _(ensures !\result ==> \wrapped(to))
+    _(ensures \wrapped(to))
     _(ensures to->valid)
     _(requires from->real)
     _(ensures to->real)
-    _(ensures \result <= 0)
+    _(ensures \result == 0)
 ; 
 
