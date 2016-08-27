@@ -1,5 +1,5 @@
 #include <vcc.h>
-#include "myblob.h"
+#include "s2n_blob.h"
 
 #define SYSTEM_PAGE_SIZE() 394857
 #define page_size  4096
