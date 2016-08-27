@@ -464,7 +464,8 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(maintains state->key.len <= state->block_size && state->alg && !is_sslv3(state->alg)  ==> 
         (&state->inner_just_key)->hashState == xor(num_resize(state->key,state->block_size),repeat(0x36,state->block_size)))
     _(maintains state->key.len > state->block_size && state->alg && !is_sslv3(state->alg)  ==> 
-        (&state->inner_just_key)->hashState == xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),repeat(0x36,state->block_size)))
+        (&state->inner_just_key)->hashState == xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),
+        repeat(0x36,state->block_size)))
     _(maintains !state->alg && !is_sslv3(state->alg) ==> (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(maintains is_sslv3(state->alg)   ==> (&state->inner_just_key)->hashState == concatenate(state->key,repeat(0x36,state->block_size)))
     _(writes &state->inner_just_key,&state->inner)
