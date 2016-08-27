@@ -43,7 +43,9 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(ensures (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(ensures (&state->inner_just_key)->real)
     {
-        s2n_hash_init(&state->inner_just_key, hash_alg);
+        /*GUARD(*/s2n_hash_init(&state->inner_just_key, hash_alg)/*)*/; //THE GUARD IS 
+        //COMMENTED OUT AS WE'RE NOT ALLOWED TO HAVE 'RETURN' STATEMENTS IN BLOCKS. THIS ISN'T A PROBLEM, BECAUSE
+        //THESE FUNCTIONS ONLY EVER RETURN 0.
         _(ghost (&state->inner)->real = 0)
         _(wrap &(&state->inner)->hash_ctx) 
         _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx}) 
@@ -68,7 +70,9 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(ensures (&state->outer)->hashState == repeat(0x0,0))
     _(ensures (&state->outer)->alg == hash_alg)
     {
-        s2n_hash_init(&state->outer, hash_alg);
+        /*GURAD(*/s2n_hash_init(&state->outer, hash_alg)/*)*/; //THE GUARD IS 
+        //COMMENTED OUT AS WE'RE NOT ALLOWED TO HAVE 'RETURN' STATEMENTS IN BLOCKS. THIS ISN'T A PROBLEM, BECAUSE
+        //THESE FUNCTIONS ONLY EVER RETURN 0.
     }
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     GUARD(s2n_hash_update(&state->outer, key, klen));
@@ -97,24 +101,24 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         break;
     case S2N_HMAC_SSLv3_MD5:
         state->block_size = 48;
-        hash_alg = S2N_HASH_MD5; //USER-ADDED
-        state->digest_size = MD5_DIGEST_LENGTH;//USER-ADDED
+        hash_alg = S2N_HASH_MD5; //USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
+        state->digest_size = MD5_DIGEST_LENGTH;//USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
          //Fall through ... 
-        break; //USER-ADDED
+        break; //USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
     case S2N_HMAC_MD5:
-        state->block_size = 48; //USER-ADDED
+        state->block_size = 48; //USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
         hash_alg = S2N_HASH_MD5;
         state->digest_size = MD5_DIGEST_LENGTH;
         break;
     case S2N_HMAC_SSLv3_SHA1:
         state->block_size = 40;
-        state->digest_size = SHA_DIGEST_LENGTH; //USER-ADDED
-        hash_alg = S2N_HASH_SHA1; //USER-ADDED
+        state->digest_size = SHA_DIGEST_LENGTH; //USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
+        hash_alg = S2N_HASH_SHA1; //USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
         // Fall through ... */
-        break; //USER-ADDED
+        break; //USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
     case S2N_HMAC_SHA1:
         hash_alg = S2N_HASH_SHA1;
-        state->block_size = 40; //USER-ADDED
+        state->block_size = 40; //USER-ADDED, AS VCC DOESN'T ALLOW FALL THROUGH
         state->digest_size = SHA_DIGEST_LENGTH;
         break;
     case S2N_HMAC_SHA224:
@@ -141,8 +145,8 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         //S2N_ERROR(S2N_ERR_HMAC_INVALID_ALGORITHM);
         _(assert 0)
     }
-    _(assert sizeof(state->xor_pad) >= state->block_size) //USER-ADDED
-    _(assert sizeof(state->digest_pad) >= state->digest_size) //USER-ADDED
+    _(assert sizeof(state->xor_pad) >= state->block_size) //USER-ADDED IN PLACE OF GET_CHECK
+    _(assert sizeof(state->digest_pad) >= state->digest_size) //USER-ADDED IN PLACE OF GET_CHECK
     //gte_check(sizeof(state->xor_pad), state->block_size);
     //gte_check(sizeof(state->digest_pad), state->digest_size);
     
@@ -151,8 +155,8 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         _(ghost state->key = make_num((uint8_t *)key,klen))
         return s2n_sslv3_mac_init(state, alg, key, klen);
     }
-    _(assert sizeof(state->xor_pad) >= state->block_size) //USER-ADDED
-    _(assert sizeof(state->digest_pad) >= state->digest_size) //USER-ADDED
+    _(assert sizeof(state->xor_pad) >= state->block_size) //USER-ADDED IN PLACE OF GET_CHECK
+    _(assert sizeof(state->digest_pad) >= state->digest_size) //USER-ADDED IN PLACE OF GET_CHECK
     //gte_check(sizeof(state->xor_pad), state->block_size);
     //gte_check(sizeof(state->digest_pad), state->digest_size);
 
@@ -166,8 +170,10 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(ensures (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(ensures (&state->outer)->real && (&state->inner_just_key)->real)
     {
-        s2n_hash_init(&state->outer, hash_alg);
-        s2n_hash_init(&state->inner_just_key, hash_alg);
+        /*GUARD(*/s2n_hash_init(&state->outer, hash_alg)/*)*/; //IN THIS AND THE FOLLOWING LINE, THE GUARD IS 
+        //COMMENTED OUT AS WE'RE NOT ALLOWED TO HAVE 'RETURN' STATEMENTS IN BLOCKS. THIS ISN'T A PROBLEM, BECAUSE
+        //THESE FUNCTIONS ONLY EVER RETURN 0.
+        /*GUARD(*/s2n_hash_init(&state->inner_just_key, hash_alg)/*)*/;
         _(ghost (&state->inner)->real = 0)
         _(wrap &(&state->inner)->hash_ctx) 
         _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx}) 
@@ -182,11 +188,11 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         _(assert !state->alg ==> (&state->outer)->hashState == repeat(0x0,0))
         s2n_hash_digest(&state->outer, state->digest_pad, state->digest_size); 
         _(assert !state->alg ==> make_num(state->digest_pad,state->digest_size) == repeat(0x0,0))
-        memcpy(state->xor_pad, state->digest_pad, state->digest_size); //USER-ADDED
+        memcpy(state->xor_pad, state->digest_pad, state->digest_size); //USER-ADDED IN PLACE OF MEMCPY
         //memcpy_check(state->xor_pad, state->digest_pad, state->digest_size);
         copied = state->digest_size;
     } else {
-        memcpy(state->xor_pad, key, klen); //USER-ADDED
+        memcpy(state->xor_pad, key, klen); //USER-ADDED IN PLACE OF MEMCPY
         //memcpy_check(state->xor_pad, key, klen);
     }
     
@@ -246,49 +252,12 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(ghost state->key = make_num((uint8_t *)key,klen))
     _(ghost state->xorpad = make_num(state->xor_pad,block_size_alg(alg)))
     _(ghost state->digestpad = make_num(state->digest_pad,digest_size_alg(alg)))
-
-   /* _(requires \wrapped(\domain_root(\embedding((uint8_t *)key)))) 
-    _(requires \thread_local_array((uint8_t *)key,klen))
-    _(requires !((uint8_t*)key \in \domain(&state->inner)) && !((uint8_t*)key \in \domain(&state->inner_just_key)))
-    _(ensures (&state->inner)->alg == hmac_to_hash(alg))
-    _(maintains (&state->inner_just_key)->alg == hmac_to_hash(alg))
-    _(maintains \wrapped(&state->inner_just_key) && \wrapped(&state->inner))
-    _(maintains (&state->inner_just_key)->valid && (&state->inner_just_key)->real)
-    _(ensures (&state->inner)->valid && (&state->inner)->real)
-    _(maintains alg && klen>block_size_alg(alg) ==> (&state->inner_just_key)->hashState == 
-        xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
-    _(maintains !alg ==> (&state->inner_just_key)->hashState == repeat(0x0,0))
-    _(maintains alg && klen<=block_size_alg(alg) ==> (&state->inner_just_key)->hashState == 
-        xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
-    _(ensures alg && klen>block_size_alg(alg) ==> (&state->inner)->hashState == 
-        xor(num_resize(hashVal(make_num((uint8_t *)key,klen),hmac_to_hash(alg)),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
-    _(ensures !alg ==> (&state->inner)->hashState == repeat(0x0,0))
-    _(ensures alg && klen<=block_size_alg(alg) ==> (&state->inner)->hashState == 
-        xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg)))) 
-    _(writes &state->inner_just_key,&state->inner)
-    {
-        _(ghost \state t = \now())
-        _(ghost hash_state_destroy(&state->inner_just_key);)
-        _(assume make_num((uint8_t*)key,klen) == \at(t,make_num((uint8_t*)key,klen)))
-        _(ghost hash_state_destroy(&state->inner))
-        _(assume make_num((uint8_t*)key,klen) == \at(t,make_num((uint8_t*)key,klen)))
-NOTE: IN THE ORIGINAL CODE, THE FUNCTION RETURNS S2N_HMAC_RESET. AS ALL THAT FUNCTION DOES IS COPY S2N_HMAC_INNER_JUST_KEY
-TO S2N_HMAC_INNER, WE HAVE COPIED THAT COMMAND AT THE END OF THIS FUNCTION TO AVOID THE EXTREMELY LENGTHY PRECONDITIONS
-THAT WOULD HAVE RESULTED.
-        state->inner = state->inner_just_key;
-        _(assume make_num((uint8_t*)key,klen) == \at(t,make_num((uint8_t*)key,klen)))
-        _(ghost wrap_hash_state((&state->inner)))
-        _(ghost wrap_hash_state((&state->inner_just_key)))
-        _(wrap (&state->inner))
-        _(wrap (&state->inner_just_key))
-    }*/
         
     _(ghost state->message = repeat(0x0,0))
     _(ghost state->valid = 0)
     _(ghost state->real = 0)
     _(wrap state)
     return s2n_hmac_reset(state);
-    //return 0;
 }
 
 int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
@@ -374,7 +343,7 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(ensures (&state->inner)->alg == (&state->outer)->alg)
     _(maintains (&state->outer)->hashState == concatenate(state->key,repeat(0x5c,state->block_size)))
     _(maintains !state->alg ==> (&state->outer)->hashState == repeat(0x0,0))
-    _(maintains valid_num((&state->outer)->hashState)) //MARKED AS UNREACHABLE
+    //_(maintains valid_num((&state->outer)->hashState)) //MARKED AS UNREACHABLE
     _(writes &state->outer,&state->inner)
     _(ensures (&state->inner)->hashState == (&state->outer)->hashState)
     _(ensures (&state->inner)->valid == (&state->outer)->valid)
@@ -484,7 +453,6 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
 {
     _(unwrap state)
     state->currently_in_hash_block = 0;
-    //memcpy_check(&state->inner, &state->inner_just_key, sizeof(state->inner));
     _(assert sizeof(state->inner) ==> &state->inner != NULL)
 
     _(maintains \mutable(state))
@@ -499,7 +467,6 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
         (&state->inner_just_key)->hashState == xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),repeat(0x36,state->block_size)))
     _(maintains !state->alg && !is_sslv3(state->alg) ==> (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(maintains is_sslv3(state->alg)   ==> (&state->inner_just_key)->hashState == concatenate(state->key,repeat(0x36,state->block_size)))
-    _(maintains valid_num((&state->inner_just_key)->hashState)) //MARKED AS UNREACHABLE - IS THIS A PROBLEM?
     _(writes &state->inner_just_key,&state->inner)
     _(ensures (&state->inner)->hashState == (&state->inner_just_key)->hashState)
     _(ensures (&state->inner)->valid == (&state->inner_just_key)->valid)
@@ -511,7 +478,7 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
         _(ghost hash_state_destroy(&state->inner_just_key);)
         _(assert (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
         _(ghost hash_state_destroy(&state->inner))
-        state->inner = state->inner_just_key;
+        state->inner = state->inner_just_key; //USER-ADDED IN PLACE OF MEMCPY
         _(assert (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
         _(ghost wrap_hash_state((&state->inner)))
         _(ghost wrap_hash_state((&state->inner_just_key)))
@@ -520,6 +487,8 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
         _(wrap (&state->inner_just_key))
         _(assert (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
     }
+
+    //memcpy_check(&state->inner, &state->inner_just_key, sizeof(state->inner)); 
 
     _(ghost state->valid = (&state->inner)->valid)
     _(ghost state->real = (&state->inner)->real)
@@ -541,7 +510,7 @@ int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     return 0;
 }
 
-/*
+/* Verification times (including smoke test):
 Verification of MD5state_st#adm succeeded. [40.95]
 Verification of MD5state_st2#adm succeeded. [13.33]
 Verification of SHAstate_st#adm succeeded. [7.19]
@@ -591,4 +560,4 @@ Verification of s2n_sslv3_mac_digest#block#0 succeeded. [125.22]
 Verification of s2n_sslv3_mac_init#block#0 succeeded. [1.83]
 Verification of s2n_sslv3_mac_init#block#1 succeeded. [1.34]
 
-=== Verification succeeded. ===
+=== Verification succeeded. ===*/
