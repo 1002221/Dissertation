@@ -17,9 +17,8 @@ int s2n_realloc(struct s2n_blob *b, uint32_t size)
     _(unwrap b)
     _(unwrap blob_data(b))
     uint8_t *data = malloc(sizeof (uint8_t) *(b->size));
-    if(data==NULL) return -1; //USER ADDED
-    memcpy/*_check*/(data, b->data, b->size);
-    data = b->data; //temp user added
+    if(data==NULL) return -1;
+    memcpy(data, b->data, b->size);
     _(wrap blob_data(b))
     _(wrap b) 
     s2n_free(b);
