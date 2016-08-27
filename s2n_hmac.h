@@ -15,10 +15,7 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <vcc.h>
 #include "s2n_hash.h"
-#include <stdlib.h>
 
 #define SYSTEM_PAGE_SIZE() 394857
 
