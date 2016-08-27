@@ -1,87 +1,40 @@
 #include <vcc.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "myblob.h"
 
-#define MD5_LONG unsigned int
-#define MD5_CBLOCK	64
-#define MD5_LBLOCK	(MD5_CBLOCK/4)
-#define MD5_DIGEST_LENGTH 16
+#define SYSTEM_PAGE_SIZE() 394857
+#define page_size  4096
 
+int s2n_realloc(struct s2n_blob *b, uint32_t size)
+       _(requires \wrapped(b))
+       _(requires size < _UI32_MAX - SYSTEM_PAGE_SIZE())
+       _(writes b)
+       ;
 
-typedef struct MD5state_st2
-	{
-	MD5_LONG A,B,C,D;
-	MD5_LONG Nl,Nh;
-	MD5_LONG data[MD5_LBLOCK];
-	unsigned int num;
-	} MD5_CTX2;
-
-#define SHA_LONG unsigned int
-#define SHA_LBLOCK	16
-#define SHA_DIGEST_LENGTH 20
-
-typedef struct SHAstate_st
-	    {
-	    SHA_LONG h0,h1,h2,h3,h4;
-	    SHA_LONG Nl,Nh;
-	    SHA_LONG data[SHA_LBLOCK];
-	    unsigned int num;
-	    } SHA_CTX;
-
-typedef struct SHAstate_st2
-	    {
-	    SHA_LONG h0,h1,h2,h3,h4;
-	    SHA_LONG Nl,Nh;
-	    SHA_LONG data[SHA_LBLOCK];
-	    unsigned int num;
-	    } SHA_CTX2;
-
-int SHA1_Final2(void *md, SHA_CTX2 *c)
-    _(requires \wrapped(c) && \thread_local_array((uint8_t *)md, SHA_DIGEST_LENGTH))
-    _(writes \array_range(md,SHA_DIGEST_LENGTH), c)
-    _(ensures \wrapped(c))
-    _(ensures \result == 1)
-;
-
-typedef enum { S2N_HASH_NONE, S2N_HASH_MD5, S2N_HASH_SHA1, S2N_HASH_SHA224, S2N_HASH_SHA256, S2N_HASH_SHA384,
-    S2N_HASH_SHA512, S2N_HASH_MD5_SHA1
-} s2n_hash_algorithm; 
-
-typedef _(dynamic_owns) struct s2n_hash_state {
-    s2n_hash_algorithm alg;
-    union {
-        SHA_CTX sha1;
-        struct {
-            SHA_CTX2 sha1;
-            MD5_CTX2 md5;
-        } md5_sha1;
-    } hash_ctx;
-    _(invariant alg == 7)
-    _(invariant alg == S2N_HASH_MD5_SHA1 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1.sha1) && \mine(&hash_ctx.md5_sha1.md5))
-    _(invariant \mine(&hash_ctx))
-};
- 
-extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
-    _(requires \wrapped(state) && \thread_local_array((uint8_t *)outt,size))
-    _(requires \wrapped(\domain_root(\embedding((uint8_t *)outt))))
-    _(requires \domain_root(\embedding((uint8_t *)outt)) != state)
-    _(requires size == 36)
-    _(writes state, \array_range(outt,size))
-    _(ensures \result <= 0)
-    _(ensures \wrapped(state))
-;
- 
-int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
+int s2n_realloc(struct s2n_blob *b, uint32_t size)
 {
-    int r;
-    _(unwrap state)
-    switch (state->alg) {
-    case S2N_HASH_MD5_SHA1:
-        _(assert size == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH)
- 
-        r = SHA1_Final2(((uint8_t *) outt) + MD5_DIGEST_LENGTH, &state->hash_ctx.md5_sha1.sha1);
-        break;
-    }
-    _(wrap state)
+    _(assume b->size && size && size>b->allocated)
+    uint32_t allocate = page_size * ((size + (page_size - 1)) / page_size);
+    _(unwrap b)
+    _(unwrap blob_data(b))
+    uint8_t *data = malloc(sizeof (uint8_t) *(b->size));
+    if(data==NULL) return -1; //USER ADDED
+    memcpy/*_check*/(data, b->data, b->size);
+    data = b->data; //temp user added
+    _(wrap blob_data(b))
+    _(wrap b) 
+    s2n_free(b);
+    b->data = data;
+    b->size = size;
+    b->allocated = allocate;
+    _(wrap blob_data(b))
     return 0;
 }
+
+ 
+int s2n_free(struct s2n_blob *b)
+       //_(requires memory_initialized())
+       _(requires \wrapped(b))
+       _(writes b)
+       _(ensures \old(b->user_allocated && b->allocated) ==> \wrapped(\old(blob_data(b))))
+       _(ensures \old(b->user_allocated) ==> \forall size_t i; i < \old(b->size) ==> \old(b->data)[i] == \old(b->val[i]))
+       ;
