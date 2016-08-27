@@ -1,7 +1,25 @@
 #pragma once
 #include <vcc.h>
 #include <stdint.h>
+#include <stdlib.h>
+
 //#include <string.h>
+
+uint8_t * memcpy(uint8_t *dst, uint8_t *src, size_t size)
+       _(writes \array_range(dst,size))
+       _(requires \thread_local_array(src,size))
+       _(requires \arrays_disjoint(dst,size, src,size))
+       _(ensures \forall size_t i; i < size ==> dst[i] == \old(src[i]))
+       _(ensures \result == dst)
+       _(decreases 0)
+;
+
+void *  memset(uint8_t * dst, uint8_t val, size_t size)
+       _(requires \mutable_array(dst,size))
+       _(writes \array_range(dst,size))
+       _(ensures \forall size_t i; i < size ==> dst[i] == val)
+       //_(ensures \result == dst)
+;
 
 typedef int BOOL;
 #define TRUE ((int) 1)
@@ -23,14 +41,13 @@ _(dynamic_owns) struct s2n_blob {
 	uint8_t *data;
  
 	// Coupling invariant
-	//_(invariant \forall size_t i; i < size ==> val[i] == data[i])
-      
+	_(invariant \forall size_t i; i < size ==> val[i] == data[i])
+    //_(invariant val == (\lambda size_t i; i<size? data[i] : (uint8_t)0x0)) 
 	// other data invariants
-	_(invariant size <= allocated)
+	_(invariant size && size <= allocated)
 	_(invariant allocated ==> \mine(blob_data(\this)))
-	//_(invariant user_allocated || !allocated || \malloc_root(blob_data(\this))) //if it's not the root object, then the only way it could have been allocated is if it was user-allocated.
-	//_(invariant mlocked == 0)
-	//_(invariant size==0 ==> !user_allocated)
+	_(invariant user_allocated || !allocated || \malloc_root(blob_data(\this))) //if it's not the root object, then the only way it could have been allocated is if it was user-allocated.
+	_(invariant mlocked == 0)
 }s2n_blob;
 
 _(def \object blob_data(struct s2n_blob *b) { return ((uint8_t[b->allocated]) b->data); })
@@ -43,10 +60,10 @@ _(def \object blob_data(struct s2n_blob *b) { return ((uint8_t[b->allocated]) b-
 })
        
 extern int s2n_blob_init(struct s2n_blob *b, uint8_t *data, uint32_t size)
-	_(requires \mutable(b))
-	//_(requires \wrapped((uint8_t[size]) data))
+	//_(requires \mutable(b))
+	_(requires \wrapped((uint8_t[size]) data))
     _(writes \array_range(data,size))
-	//_(writes (uint8_t[size]) data)
+	_(writes (uint8_t[size]) data)
 	_(requires size>0)
 	_(writes \span(b))
 	_(ensures \wrapped(b) && b->size == size && b->allocated == size && b->user_allocated && b->data == data
@@ -66,3 +83,9 @@ extern int s2n_blob_zero(struct s2n_blob *b)
     _(ensures \result <= 0)
 ;
 
+_(ghost int blob_destroy(struct s2n_blob *b)
+    _(requires \wrapped(b))
+    _(writes b)
+    _(ensures \extent_mutable(b))
+    _(ensures \extent_fresh(b))
+;)
