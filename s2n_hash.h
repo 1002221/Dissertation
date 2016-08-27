@@ -539,7 +539,6 @@ extern int s2n_hash_init_none(struct s2n_hash_state *state, s2n_hash_algorithm a
 
 extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
     _(requires is_valid_hash(alg))
-   // _(requires \extent_mutable(state))
     _(writes \extent(state))
     _(ensures \wrapped(state))
     _(ensures state->alg == alg)
@@ -549,8 +548,6 @@ extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
     _(ensures state->real)
     _(decreases 0)
 ;
-
-
 
 extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
     _(maintains state->valid)
@@ -585,8 +582,6 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
     _(decreases 0)
 ;
 
-
-
 extern int s2n_hash_reset(struct s2n_hash_state *state)
     _(requires \wrapped(state))
     _(writes state)
@@ -598,8 +593,6 @@ extern int s2n_hash_reset(struct s2n_hash_state *state)
     _(maintains state->real)
 ;
 
-
-
 extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(requires \extent_mutable(to))
     _(requires \wrapped(from))
@@ -608,7 +601,7 @@ extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(writes \extent(to),from)
     _(ensures to->hashState == from->hashState)
     _(ensures !\result ==> \wrapped(to))
-    //_(ensures to->valid)
+    _(ensures to->valid)
     _(requires from->real)
     _(ensures to->real)
     _(ensures \result <= 0)
