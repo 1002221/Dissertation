@@ -347,13 +347,13 @@ extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, c
     _(requires \thread_local_array((uint8_t *)key,klen))
     _(requires is_valid_hmac(alg))
     _(writes \extent(state))
-    _(ensures !\result ==> state->message == repeat(0x0,0))
-    _(ensures \result <= 0)
-    _(ensures !\result ==> \wrapped(state))
+    _(ensures state->message == repeat(0x0,0))
+    _(ensures \result == 0)
+    _(ensures \wrapped(state))
     _(ensures state->alg == alg)
     _(ensures state->key == make_num((uint8_t *)key,klen))
-    _(ensures !\result ==> state->valid)
-    _(ensures !\result ==> state->real)
+    _(ensures state->valid)
+    _(ensures state->real)
     _(decreases 0)
     ;
   
@@ -363,11 +363,11 @@ extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_
     _(maintains state->real)
     _(requires \thread_local_array((uint8_t *)in,size))
     _(writes state)
-    _(ensures !\result && state->alg ==> state->message == concatenate(\old(state->message),make_num((uint8_t *)in,size)))
-    _(ensures !\result && !state->alg ==> state->message == repeat(0x0,0))
+    _(ensures state->alg ==> state->message == concatenate(\old(state->message),make_num((uint8_t *)in,size)))
+    _(ensures !state->alg ==> state->message == repeat(0x0,0))
     _(ensures \unchanged(state->alg))
     _(ensures \unchanged(state->key))
-    _(ensures \result <= 0);
+    _(ensures \result == 0);
 
 extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
@@ -376,56 +376,50 @@ extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t si
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
     _(writes state, \array_range(_(uint8_t *)outt, size)) 
     _(ensures \unchanged(state->alg))
-    _(ensures !\result && is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
+    _(ensures is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
         hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
         hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),
         hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
-    _(ensures !\result && state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
+    _(ensures state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
         make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,
         hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),
         hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),
         repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures !\result && state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
+    _(ensures state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
         make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
         repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(state->key,state->block_size),
         repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures !\result && !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
+    _(ensures !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
     _(ensures \unchanged(state->key))
     _(ensures \unchanged(state->message))
-    _(ensures !\result ==> !state->valid)
-    _(ensures \result <= 0)
+    _(ensures !state->valid)
+    _(ensures \result == 0)
 ;
 
 extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
     _(requires state->valid)
+    _(ensures !state->valid)
     _(maintains state->real)
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
     _(requires !is_sslv3(state->alg))
     _(writes state, \array_range(_(uint8_t *)outt,size))
-    _(ensures !\result && is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
+    _(ensures is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
         hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
         hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),\old(state->message)),
         hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
-    _(ensures !\result && state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
+    _(ensures state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
         make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,
         hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),
         hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),
         repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures !\result && state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
+    _(ensures state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
         make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
         repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(state->key,state->block_size),
         repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures !\result && !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
-    _(ensures \result <= 0)   
+    _(ensures !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
+    _(ensures \result == 0)   
     ;
-
-extern int s2n_constant_time_equals(const uint8_t *a, const uint8_t *b, uint32_t len)
-    _(requires \thread_local_array((uint8_t *)a,len))
-    _(requires \thread_local_array((uint8_t *)b,len))
-    _(ensures (\forall uint8_t i; i<len ==> ((uint8_t *)(a))[i]==((uint8_t *)(b))[i]) ==> \result == 1)
-    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result == 0)
-;
 
 /*extern int s2n_constant_time_equals(const uint8_t *a, const uint8_t *b, uint32_t len)
     _(requires \thread_local_array((uint8_t *)a,len))
@@ -452,7 +446,7 @@ extern int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(ensures state->message == repeat(0x0,0))
     _(ensures \unchanged(state->alg))
     _(ensures \unchanged(state->key))
-    _(ensures \result <= 0)
+    _(ensures \result == 0)
     _(ensures state->valid)
     _(ensures state->real)
     _(decreases 0) 
@@ -528,7 +522,7 @@ extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     _(requires from->real)
     _(writes \extent(to), from)
     _(ensures \wrapped(to))
-    _(ensures \result <= 0)
+    _(ensures \result == 0)
     _(ensures hashState(&to->inner,0) == \old(hashState(&from->inner,0)))
     _(ensures to->valid)
     _(ensures to->real)
