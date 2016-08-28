@@ -86,18 +86,14 @@ struct s2n_hmac_state {
     _(invariant is_sslv3(alg) ==> (&outer)->hashState == concatenate(key,repeat(0x5c,block_size)))
     /* key needs to be as large as the biggest block size */
     uint8_t xor_pad[128];
-    _(ghost Num xorpad)
-    _(invariant xorpad == make_num(xor_pad,block_size))
     _(invariant key.len>block_size && alg && !is_sslv3(alg) ==> 
-        xorpad == xor(num_resize(hashVal(key,hmac_to_hash(alg)),block_size),repeat(0x5c,block_size)))
-    _(invariant key.len>block_size && !alg && !is_sslv3(alg) ==> xorpad == repeat(0x5c,block_size))
+        make_num(xor_pad,block_size) == xor(num_resize(hashVal(key,hmac_to_hash(alg)),block_size),repeat(0x5c,block_size)))
+    _(invariant key.len>block_size && !alg && !is_sslv3(alg) ==> make_num(xor_pad,block_size) == repeat(0x5c,block_size))
     _(invariant key.len<=block_size && !is_sslv3(alg) ==> 
-        xorpad == xor(num_resize(key,block_size),repeat(0x5c,block_size)))
-    _(invariant is_sslv3(alg) ==> xorpad == repeat(0x5c,block_size))
+        make_num(xor_pad,block_size) == xor(num_resize(key,block_size),repeat(0x5c,block_size)))
+    _(invariant is_sslv3(alg) ==> make_num(xor_pad,block_size) == repeat(0x5c,block_size))
     /* For storing the inner digest */
     uint8_t digest_pad[SHA512_DIGEST_LENGTH];
-    _(ghost Num digestpad)
-    _(invariant digestpad == make_num(digest_pad,digest_size))
     _(invariant alg>=0 && alg <= 8)
     _(invariant valid==>(&inner)->alg == hmac_to_hash(alg))
     _(invariant (&inner_just_key)->alg == hmac_to_hash(alg))
@@ -455,11 +451,9 @@ extern int s2n_hmac_reset(struct s2n_hmac_state *state)
 _(ghost int hmac_state_destroy(struct s2n_hmac_state *s)
     _(requires \wrapped(s) || \mutable(s))
     _(writes s)
-    _(ensures s->digestpad == make_num(s->digest_pad,s->digest_size))
-    _(ensures s->xorpad == make_num(s->xor_pad,s->block_size))
-    _(ensures \forall size_t i; i<128 ==> \unchanged(s->xor_pad[i]))
-    _(ensures \forall size_t i; i<SHA512_DIGEST_LENGTH ==> \unchanged(s->digest_pad[i]))
-    _(ensures \unchanged(s->digestpad) && \unchanged(s->xorpad) && \unchanged(s->digest_size) && \unchanged(s->block_size))
+    /*_(ensures \forall size_t i; i<128 ==> \unchanged(s->xor_pad[i]))
+    _(ensures \forall size_t i; i<SHA512_DIGEST_LENGTH ==> \unchanged(s->digest_pad[i]))*/
+    _(ensures /*\unchanged(make_num(s->digest_pad,s->digest_size)) && */\unchanged(make_num(s->xor_pad,s->block_size)))
     _(ensures \extent_fresh(s))
     _(ensures \extent_mutable(s))
     _(ensures \unchanged(s->alg))
