@@ -33,8 +33,7 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
         state->xor_pad[i] = 0x36;
     }
 
-    _(ghost state->xorpad = make_num(state->xor_pad,state->block_size))
-    
+
     _(requires hash_alg == hmac_to_hash(alg))
     _(writes \extent(&state->inner_just_key), \extent(&state->inner))
     _(ensures \wrapped(&state->inner_just_key) && \wrapped(&state->inner))
@@ -53,13 +52,12 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     }
     GUARD(s2n_hash_update(&state->inner_just_key, key, klen));
     GUARD(s2n_hash_update(&state->inner_just_key, state->xor_pad, state->block_size));
-    _(assert (&state->inner_just_key)->hashState == concatenate(state->key,state->xorpad))
+    _(assert (&state->inner_just_key)->hashState == concatenate(state->key,make_num(state->xor_pad,state->block_size)))
     for (int i = 0; i < state->block_size; i++) 
         _(writes \array_range(state->xor_pad,state->block_size))
         _(invariant \forall int j; j>=0 && j<i ==> state->xor_pad[j]==0x5c){
         state->xor_pad[i] = 0x5c;
     }
-    _(ghost state->xorpad = make_num(state->xor_pad,state->block_size))
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     
     _(requires hash_alg == hmac_to_hash(alg))
@@ -83,7 +81,6 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(ghost state->valid = 0)
     _(ghost state->real = 0)
     _(ghost state->message = repeat(0x0,0))
-    _(ghost state->digestpad = make_num(state->digest_pad,state->digest_size))
     _(wrap state)
     return s2n_hmac_reset(state);
 }
@@ -250,12 +247,10 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         xor(num_resize(make_num((uint8_t *)key,klen),block_size_alg(alg)),repeat(0x36,block_size_alg(alg))))
     
     _(ghost state->key = make_num((uint8_t *)key,klen))
-    _(ghost state->xorpad = make_num(state->xor_pad,block_size_alg(alg)))
-    _(ghost state->digestpad = make_num(state->digest_pad,digest_size_alg(alg)))
         
-    _(ghost state->message = repeat(0x0,0))
     _(ghost state->valid = 0)
     _(ghost state->real = 0)
+    _(ghost state->message = repeat(0x0,0))
     _(wrap state)
     return s2n_hmac_reset(state);
 }
@@ -324,14 +319,12 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
         _(invariant \forall int j; j>=0 && j<i ==> state->xor_pad[j]==0x5c){
         state->xor_pad[i] = 0x5c;
     }
-    _(ghost state->xorpad = make_num(state->xor_pad,state->block_size))
     _(assert \wrapped_with_deep_domain(&state->outer))
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     _(ghost \state s= \now())
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
     _(ghost state->valid = (&state->inner)->valid)
-    _(ghost state->digestpad = make_num(state->digest_pad, state->digest_size))
-    _(assert state->digestpad == hashVal(concatenate((&state->inner_just_key)->hashState,state->message),hmac_to_hash(state->alg)))
+    _(assert make_num(state->digest_pad,state->digest_size) == hashVal(concatenate((&state->inner_just_key)->hashState,state->message),hmac_to_hash(state->alg)))
     _(assert sizeof(state->inner) ==> &state->inner != NULL)
     //memcpy/*_check*//*(&state->inner, &state->outer, sizeof(state->inner));
 
@@ -390,8 +383,7 @@ int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(assert (&state->inner)->hashState == concatenate((&state->inner_just_key)->hashState,state->message))
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
     _(ghost state->valid = (&state->inner)->valid)
-    _(ghost state->digestpad = make_num(state->digest_pad,state->digest_size))
-    _(assert state->alg ==> state->digestpad == 
+    _(assert state->alg ==> make_num(state->digest_pad,state->digest_size) == 
         hashVal(concatenate((&state->inner_just_key)->hashState,state->message),hmac_to_hash(state->alg)))
     _(assert \wrapped_with_deep_domain(&state->inner))
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
@@ -403,7 +395,7 @@ int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(assert \wrapped_with_deep_domain(&state->inner))
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     GUARD(s2n_hash_update(&state->outer, state->digest_pad, state->digest_size));
-    _(assert state->alg ==> (&state->outer)->hashState == concatenate(state->xorpad,state->digestpad))  
+    _(assert state->alg ==> (&state->outer)->hashState == concatenate(make_num(state->xor_pad,state->block_size),make_num(state->digest_pad,state->digest_size)))  
     _(assert !state->alg ==> (&state->outer)->hashState == repeat(0x0,0))  
     { 
         _(assert \wrapped_with_deep_domain(&state->inner))
@@ -510,54 +502,49 @@ int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     return 0;
 }
 
-/* Verification times (including smoke test):
-Verification of MD5state_st#adm succeeded. [40.95]
-Verification of MD5state_st2#adm succeeded. [13.33]
-Verification of SHAstate_st#adm succeeded. [7.19]
-Verification of SHAstate_st2#adm succeeded. [7.61]
-Verification of SHA224state_st#adm succeeded. [7.89]
-Verification of SHA256state_st#adm succeeded. [12.30]
-Verification of SHA384state_st#adm succeeded. [5.86]
-Verification of SHA512state_st#adm succeeded. [7.31]
-Verification of s2n_hash_state#adm succeeded. [9.25]
-Verification of s2n_hmac_state#adm succeeded. [14.44]
-Verification of swprintf succeeded. [1.86]
-Verification of vswprintf succeeded. [1.61]
-Verification of _swprintf_l succeeded. [2.06]
-Verification of _vswprintf_l succeeded. [1.78]
-Verification of xor succeeded. [4.28]
-Verification of valid_num succeeded. [3.77]
-Verification of make_num succeeded. [4.03]
-Verification of repeat succeeded. [4.80]
-Verification of concatenate succeeded. [5.95]
-Verification of deconcatenate succeeded. [4.47]
-Verification of num_resize succeeded. [12.05]
-Verification of xor_ass succeeded. [1.41]
-Verification of xor_combine succeeded. [1.27]
-Verification of is_valid_hash succeeded. [4.66]
-Verification of s2n_hash_digest_size succeeded. [3.80]
-Verification of alg_digest_size succeeded. [17.53]
-Verification of hashState succeeded. [17.33]
-Verification of s2n_hmac_digest_size succeeded. [4.88]
-Verification of block_size_alg succeeded. [9.27]
-Verification of hash_block_size_alg succeeded. [5.72]
-Verification of digest_size_alg succeeded. [13.66]
-Verification of hmac_to_hash succeeded. [16.51]
-Verification of is_sslv3 succeeded. [4.81]
-Verification of is_valid_hmac succeeded. [5.23]
-Verification of s2n_hmac_init succeeded. [744.80]
-Verification of s2n_hmac_update succeeded. [485.14]
-Verification of s2n_hmac_digest succeeded. [50.22]
-Verification of s2n_hmac_digest_two_compression_rounds succeeded. [23.91]
-Verification of s2n_hmac_reset succeeded. [6.39]
-Verification of s2n_hmac_copy succeeded. [211.47]
-Verification of s2n_sslv3_mac_init succeeded. [700.06]
-Verification of s2n_sslv3_mac_digest succeeded. [39.67]
-Verification of xor_ass#bv_lemma#0 succeeded. [4.44]
-Verification of s2n_hmac_init#block#0 succeeded. [17.34]
-Verification of s2n_hmac_reset#block#0 succeeded. [144.69]
-Verification of s2n_sslv3_mac_digest#block#0 succeeded. [125.22]
-Verification of s2n_sslv3_mac_init#block#0 succeeded. [1.83]
-Verification of s2n_sslv3_mac_init#block#1 succeeded. [1.34]
+/* Verification times:
+Verification of MD5state_st#adm succeeded. [7.41]
+Verification of MD5state_st2#adm succeeded. [0.03]
+Verification of SHAstate_st#adm succeeded. [0.03]
+Verification of SHAstate_st2#adm succeeded. [0.03]
+Verification of SHA224state_st#adm succeeded. [0.03]
+Verification of SHA256state_st#adm succeeded. [0.03]
+Verification of SHA384state_st#adm succeeded. [0.03]
+Verification of SHA512state_st#adm succeeded. [0.03]
+Verification of s2n_hash_state#adm succeeded. [1.73]
+Verification of s2n_hmac_state#adm succeeded. [1.53]
+Verification of xor succeeded. [0.02]
+Verification of valid_num succeeded. [0.01]
+Verification of make_num succeeded. [0.03]
+Verification of repeat succeeded. [0.02]
+Verification of concatenate succeeded. [0.02]
+Verification of deconcatenate succeeded. [0.02]
+Verification of num_resize succeeded. [0.02]
+Verification of xor_ass succeeded. [0.02]
+Verification of is_valid_hash succeeded. [0.00]
+Verification of s2n_hash_digest_size succeeded. [0.41]
+Verification of alg_digest_size succeeded. [0.02]
+Verification of hashState succeeded. [0.03]
+Verification of s2n_hmac_digest_size succeeded. [0.02]
+Verification of block_size_alg succeeded. [0.02]
+Verification of hash_block_size_alg succeeded. [0.02]
+Verification of digest_size_alg succeeded. [0.01]
+Verification of hmac_to_hash succeeded. [0.02]
+Verification of is_sslv3 succeeded. [0.02]
+Verification of is_valid_hmac succeeded. [0.00]
+Verification of s2n_hmac_init succeeded. [611.22]
+Verification of s2n_hmac_update succeeded. [17.02]
+Verification of s2n_hmac_digest succeeded. [39.91]
+Verification of s2n_hmac_digest_two_compression_rounds succeeded. [4.63]
+Verification of s2n_hmac_reset succeeded. [2.91]
+Verification of s2n_hmac_copy succeeded. [116.94]
+Verification of s2n_sslv3_mac_init succeeded. [389.28]
+Verification of s2n_sslv3_mac_digest succeeded. [16.97]
+Verification of xor_ass#bv_lemma#0 succeeded. [1.41]
+Verification of s2n_hmac_init#block#0 succeeded. [7.09]
+Verification of s2n_hmac_reset#block#0 succeeded. [19.41]
+Verification of s2n_sslv3_mac_digest#block#0 succeeded. [16.34]
+Verification of s2n_sslv3_mac_init#block#0 succeeded. [0.58]
+Verification of s2n_sslv3_mac_init#block#1 succeeded. [0.05]
 
 === Verification succeeded. ===*/
