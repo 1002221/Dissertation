@@ -62,18 +62,19 @@ struct s2n_hmac_state {
     uint32_t currently_in_hash_block;
     uint16_t block_size;
     uint8_t digest_size;
-    _(ghost \bool valid)
-    _(invariant valid ==> (&inner)->valid)
-    _(invariant (&inner_just_key)->valid)
-    _(invariant is_sslv3(alg) ==> (&outer)->valid)
+    _(ghost \bool usable)
+    _(invariant usable ==> (&inner)->usable)
+    _(invariant (&inner_just_key)->usable)
+    _(invariant is_sslv3(alg) ==> (&outer)->usable)
     _(ghost Num key)
     _(ghost Num message)
-    _(invariant valid_num(message))
-    _(invariant valid ==> concatenate((&inner_just_key)->hashState,message) == (&inner)->hashState)
+    _(invariant real ==> usable_num(message))
+    _(invariant usable ==> concatenate((&inner_just_key)->hashState,message) == (&inner)->hashState)
     struct s2n_hash_state inner;
     struct s2n_hash_state inner_just_key;
     struct s2n_hash_state outer;
     _(ghost \bool real)
+    _(invariant usable ==> real)
     _(invariant (&inner_just_key)->real && (&outer)->real)
     _(invariant real ==> (&inner)->real)
     _(invariant key.len <= block_size && alg && !is_sslv3(alg)  ==> 
@@ -95,7 +96,7 @@ struct s2n_hmac_state {
     /* For storing the inner digest */
     uint8_t digest_pad[SHA512_DIGEST_LENGTH];
     _(invariant alg>=0 && alg <= 8)
-    _(invariant valid==>(&inner)->alg == hmac_to_hash(alg))
+    _(invariant real==>(&inner)->alg == hmac_to_hash(alg))
     _(invariant (&inner_just_key)->alg == hmac_to_hash(alg))
     _(invariant (&outer)->alg == hmac_to_hash(alg))
     _(invariant \mine(&inner) && \mine(&outer) && \mine(&inner_just_key))
@@ -348,14 +349,14 @@ extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, c
     _(ensures \wrapped(state))
     _(ensures state->alg == alg)
     _(ensures state->key == make_num((uint8_t *)key,klen))
-    _(ensures state->valid)
+    _(ensures state->usable)
     _(ensures state->real)
     _(decreases 0)
     ;
   
 extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
     _(maintains \wrapped(state))
-    _(maintains state->valid)
+    _(maintains state->usable)
     _(maintains state->real)
     _(requires \thread_local_array((uint8_t *)in,size))
     _(writes state)
@@ -367,7 +368,7 @@ extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_
 
 extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
-    _(requires state->valid)
+    _(requires state->usable)
     _(maintains state->real)
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
     _(writes state, \array_range(_(uint8_t *)outt, size)) 
@@ -388,14 +389,14 @@ extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t si
     _(ensures !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
     _(ensures \unchanged(state->key))
     _(ensures \unchanged(state->message))
-    _(ensures !state->valid)
+    _(ensures !state->usable)
     _(ensures \result == 0)
 ;
 
 extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
-    _(requires state->valid)
-    _(ensures !state->valid)
+    _(requires state->usable)
+    _(ensures !state->usable)
     _(maintains state->real)
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
     _(requires !is_sslv3(state->alg))
@@ -443,7 +444,7 @@ extern int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(ensures \unchanged(state->alg))
     _(ensures \unchanged(state->key))
     _(ensures \result == 0)
-    _(ensures state->valid)
+    _(ensures state->usable)
     _(ensures state->real)
     _(decreases 0) 
 ;
@@ -469,40 +470,40 @@ _(ghost int hmac_state_destroy(struct s2n_hmac_state *s)
     _(ensures \unchanged(s->message))
     _(ensures \unchanged(s->real))
     _(ensures \unchanged((&s->inner_just_key)->hashState))
-    _(ensures \unchanged(s->valid) && \unchanged((&s->inner)->valid) && \unchanged((&s->outer)->valid) && 
-        \unchanged((&s->inner_just_key)->valid))
+    _(ensures \unchanged(s->usable) && \unchanged((&s->inner)->usable) && \unchanged((&s->outer)->usable) && 
+        \unchanged((&s->inner_just_key)->usable))
     _(ensures \unchanged((&s->inner)->real) && \unchanged((&s->outer)->real) && 
         \unchanged((&s->inner_just_key)->real))
     _(ensures hmac_to_hash(s->alg) == S2N_HASH_MD5    ==> \union_active(&(&s->inner)->hash_ctx.md5)    && 
         \union_active(&(&s->outer)->hash_ctx.md5)    && \union_active(&(&s->inner_just_key)->hash_ctx.md5)    
         && \unchanged((&(&s->inner_just_key)->hash_ctx.md5)->val)    && \unchanged((&(&s->inner)->hash_ctx.md5)->val)    
-        && \unchanged((&(&s->outer)->hash_ctx.md5)->val)    && \unchanged((&(&s->inner_just_key)->hash_ctx.md5)->valid)    
-        && \unchanged((&(&s->inner)->hash_ctx.md5)->valid)    && \unchanged((&(&s->outer)->hash_ctx.md5)->valid))
+        && \unchanged((&(&s->outer)->hash_ctx.md5)->val)    && \unchanged((&(&s->inner_just_key)->hash_ctx.md5)->usable)    
+        && \unchanged((&(&s->inner)->hash_ctx.md5)->usable)    && \unchanged((&(&s->outer)->hash_ctx.md5)->usable))
     _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA1   ==> \union_active(&(&s->inner)->hash_ctx.sha1)   && 
         \union_active(&(&s->outer)->hash_ctx.sha1)   && \union_active(&(&s->inner_just_key)->hash_ctx.sha1)   
         && \unchanged((&(&s->inner_just_key)->hash_ctx.sha1)->val)   && \unchanged((&(&s->inner)->hash_ctx.sha1)->val)   
-        && \unchanged((&(&s->outer)->hash_ctx.sha1)->val)   && \unchanged((&(&s->inner_just_key)->hash_ctx.sha1)->valid)   
-        && \unchanged((&(&s->inner)->hash_ctx.sha1)->valid)   && \unchanged((&(&s->outer)->hash_ctx.sha1)->valid))
+        && \unchanged((&(&s->outer)->hash_ctx.sha1)->val)   && \unchanged((&(&s->inner_just_key)->hash_ctx.sha1)->usable)   
+        && \unchanged((&(&s->inner)->hash_ctx.sha1)->usable)   && \unchanged((&(&s->outer)->hash_ctx.sha1)->usable))
     _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA224 ==> \union_active(&(&s->inner)->hash_ctx.sha224) && 
         \union_active(&(&s->outer)->hash_ctx.sha224) && \union_active(&(&s->inner_just_key)->hash_ctx.sha224) && 
         \unchanged((&(&s->inner_just_key)->hash_ctx.sha224)->val) && \unchanged((&(&s->inner)->hash_ctx.sha224)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha224)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha224)->valid) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha224)->valid) && \unchanged((&(&s->outer)->hash_ctx.sha224)->valid))
+        \unchanged((&(&s->outer)->hash_ctx.sha224)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha224)->usable) && 
+        \unchanged((&(&s->inner)->hash_ctx.sha224)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha224)->usable))
     _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA256 ==> \union_active(&(&s->inner)->hash_ctx.sha256) && 
         \union_active(&(&s->outer)->hash_ctx.sha256) && \union_active(&(&s->inner_just_key)->hash_ctx.sha256) && 
         \unchanged((&(&s->inner_just_key)->hash_ctx.sha256)->val) && \unchanged((&(&s->inner)->hash_ctx.sha256)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha256)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha256)->valid) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha256)->valid) && \unchanged((&(&s->outer)->hash_ctx.sha256)->valid))
+        \unchanged((&(&s->outer)->hash_ctx.sha256)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha256)->usable) && 
+        \unchanged((&(&s->inner)->hash_ctx.sha256)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha256)->usable))
     _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA384 ==> \union_active(&(&s->inner)->hash_ctx.sha384) && 
         \union_active(&(&s->outer)->hash_ctx.sha384) && \union_active(&(&s->inner_just_key)->hash_ctx.sha384) && 
         \unchanged((&(&s->inner_just_key)->hash_ctx.sha384)->val) && \unchanged((&(&s->inner)->hash_ctx.sha384)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha384)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha384)->valid) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha384)->valid) && \unchanged((&(&s->outer)->hash_ctx.sha384)->valid))
+        \unchanged((&(&s->outer)->hash_ctx.sha384)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha384)->usable) && 
+        \unchanged((&(&s->inner)->hash_ctx.sha384)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha384)->usable))
     _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA512 ==> \union_active(&(&s->inner)->hash_ctx.sha512) && 
         \union_active(&(&s->outer)->hash_ctx.sha512) && \union_active(&(&s->inner_just_key)->hash_ctx.sha512) && 
         \unchanged((&(&s->inner_just_key)->hash_ctx.sha512)->val) && \unchanged((&(&s->inner)->hash_ctx.sha512)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha512)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha512)->valid) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha512)->valid) && \unchanged((&(&s->outer)->hash_ctx.sha512)->valid))
+        \unchanged((&(&s->outer)->hash_ctx.sha512)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha512)->usable) && 
+        \unchanged((&(&s->inner)->hash_ctx.sha512)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha512)->usable))
     _(ensures \unchanged(s->key))
     _(ensures \unchanged(hashVal(s->key,hmac_to_hash(s->alg))))
     _(decreases 0)
@@ -512,13 +513,13 @@ extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
     _(requires \wrapped(from))
     _(requires \extent_mutable(to))
     _(requires from != to)
-    _(requires from->valid)
+    _(requires from->usable)
     _(requires from->real)
     _(writes \extent(to), from)
     _(ensures \wrapped(to))
     _(ensures \result == 0)
     _(ensures hashState(&to->inner,0) == \old(hashState(&from->inner,0)))
-    _(ensures to->valid)
+    _(ensures to->usable)
     _(ensures to->real)
 ; 
 
