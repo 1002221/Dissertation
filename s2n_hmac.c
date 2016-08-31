@@ -14,7 +14,7 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(ensures state->message == repeat(0x0,0))
     _(ensures \result == 0)
     _(ensures \unchanged(state->key))
-    _(ensures state->valid)
+    _(ensures state->usable)
     _(ensures state->real)
     _(decreases 0)
 {
@@ -38,7 +38,7 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(writes \extent(&state->inner_just_key), \extent(&state->inner))
     _(ensures \wrapped(&state->inner_just_key) && \wrapped(&state->inner))
     _(ensures (&state->inner_just_key)->alg == hmac_to_hash(alg))
-    _(ensures (&state->inner_just_key)->valid)
+    _(ensures (&state->inner_just_key)->usable)
     _(ensures (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(ensures (&state->inner_just_key)->real)
     {
@@ -63,7 +63,7 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     _(requires hash_alg == hmac_to_hash(alg))
     _(writes \extent(&state->outer))
     _(ensures \wrapped(&state->outer))
-    _(ensures (&state->outer)->valid)
+    _(ensures (&state->outer)->usable)
     _(ensures (&state->outer)->real)
     _(ensures (&state->outer)->hashState == repeat(0x0,0))
     _(ensures (&state->outer)->alg == hash_alg)
@@ -78,9 +78,11 @@ static int s2n_sslv3_mac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm a
     GUARD(s2n_hash_update(&state->outer, state->xor_pad, state->block_size));
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     _(assert \wrapped_with_deep_domain(&state->outer))
-    _(ghost state->valid = 0)
+    _(ghost state->usable = 0)
     _(ghost state->real = 0)
     _(ghost state->message = repeat(0x0,0))
+    _(ghost state->\owns = {&state->inner, &state->inner_just_key, &state->outer})
+    _(assert \inv(state))
     _(wrap state)
     return s2n_hmac_reset(state);
 }
@@ -139,7 +141,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
         state->hash_block_size = 128;
         break;
     default:
-        //S2N_ERROR(S2N_ERR_HMAC_INVALID_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HMAC_INusable_ALGORITHM);
         _(assert 0)
     }
     _(assert sizeof(state->xor_pad) >= state->block_size) //USER-ADDED IN PLACE OF GET_CHECK
@@ -162,7 +164,7 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     _(ensures \wrapped(&state->outer) && \wrapped(&state->inner_just_key) && \wrapped(&state->inner))
     _(ensures (&state->outer)->alg == hmac_to_hash(alg))
     _(ensures (&state->inner_just_key)->alg == hmac_to_hash(alg))
-    _(ensures (&state->outer)->valid && (&state->inner_just_key)->valid)
+    _(ensures (&state->outer)->usable && (&state->inner_just_key)->usable)
     _(ensures (&state->outer)->hashState == repeat(0x0,0))
     _(ensures (&state->inner_just_key)->hashState == repeat(0x0,0))
     _(ensures (&state->outer)->real && (&state->inner_just_key)->real)
@@ -248,9 +250,11 @@ int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const vo
     
     _(ghost state->key = make_num((uint8_t *)key,klen))
         
-    _(ghost state->valid = 0)
+    _(ghost state->usable = 0)
     _(ghost state->real = 0)
     _(ghost state->message = repeat(0x0,0))
+    _(ghost state->\owns = {&state->inner, &state->inner_just_key, &state->outer})
+    _(assert \inv(state))
     _(wrap state)
     return s2n_hmac_reset(state);
 }
@@ -262,7 +266,7 @@ int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
      * Why the 4294949760 constant in this code? 4294949760 is the highest 32-bit
      * value that is congruent to 0 modulo all of our HMAC block sizes, that is also
      * at least 16k smaller than 2^32. It therefore has no effect on the mathematical
-     * result, and no valid record size can cause it to overflow.
+     * result, and no usable record size can cause it to overflow.
      * 
      * The value was found with the following python code;
      * 
@@ -297,7 +301,7 @@ int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
 
 static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
-    _(requires state->valid)
+    _(requires state->usable)
     _(maintains state->real)
     _(requires is_sslv3(state->alg))
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
@@ -308,7 +312,7 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
         hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),
         hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
     _(ensures \unchanged(state->alg))
-    _(ensures !state->valid)
+    _(ensures !state->usable)
     _(ensures \unchanged(state->key))
     _(ensures \unchanged(state->message))
 {
@@ -323,14 +327,14 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(assert \wrapped_with_deep_domain(&state->inner_just_key))
     _(ghost \state s= \now())
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
-    _(ghost state->valid = (&state->inner)->valid)
+    _(ghost state->usable = (&state->inner)->usable)
     _(assert make_num(state->digest_pad,state->digest_size) == hashVal(concatenate((&state->inner_just_key)->hashState,state->message),hmac_to_hash(state->alg)))
     _(assert sizeof(state->inner) ==> &state->inner != NULL)
     //memcpy/*_check*//*(&state->inner, &state->outer, sizeof(state->inner));
 
     _(maintains \mutable(state))
     _(maintains \wrapped(&state->inner) && \wrapped(&state->outer))
-    _(maintains (&state->outer)->valid)
+    _(maintains (&state->outer)->usable)
     _(maintains (&state->outer)->real)
     _(maintains (&state->outer)->alg == hmac_to_hash(state->alg))
     _(ensures (&state->inner)->alg == (&state->outer)->alg)
@@ -338,7 +342,7 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(maintains !state->alg ==> (&state->outer)->hashState == repeat(0x0,0))
     _(writes &state->outer,&state->inner)
     _(ensures (&state->inner)->hashState == (&state->outer)->hashState)
-    _(ensures (&state->inner)->valid == (&state->outer)->valid)
+    _(ensures (&state->inner)->usable == (&state->outer)->usable)
     _(ensures (&state->inner)->real == (&state->outer)->real)
     {
         _(assert (&state->outer)->alg == hmac_to_hash(state->alg))
@@ -366,7 +370,7 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
         _(assert \wrapped_with_deep_domain(&state->outer))
         _(assert \wrapped_with_deep_domain(&state->inner_just_key))
         int res= s2n_hash_digest(&state->inner, outt, size);
-        _(ghost state->valid = (&state->inner)->valid)
+        _(ghost state->usable = (&state->inner)->usable)
         _(wrap state)
         return res;
     }
@@ -382,7 +386,7 @@ int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(ghost \state s = \now())
     _(assert (&state->inner)->hashState == concatenate((&state->inner_just_key)->hashState,state->message))
     GUARD(s2n_hash_digest(&state->inner, state->digest_pad, state->digest_size));
-    _(ghost state->valid = (&state->inner)->valid)
+    _(ghost state->usable = (&state->inner)->usable)
     _(assert state->alg ==> make_num(state->digest_pad,state->digest_size) == 
         hashVal(concatenate((&state->inner_just_key)->hashState,state->message),hmac_to_hash(state->alg)))
     _(assert \wrapped_with_deep_domain(&state->inner))
@@ -411,7 +415,7 @@ int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *o
     _(assert state->hash_block_size >=9)
     
     GUARD(s2n_hmac_digest(state, outt, size));
-    _(assert !state->valid)
+    _(assert !state->usable)
     _(assert \inv(state))
     _(assert  state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
         make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
@@ -448,7 +452,7 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
 
     _(maintains \mutable(state))
     _(maintains \wrapped(&state->inner) && \wrapped(&state->inner_just_key))
-    _(maintains (&state->inner_just_key)->valid)
+    _(maintains (&state->inner_just_key)->usable)
     _(maintains (&state->inner_just_key)->real)
     _(maintains (&state->inner_just_key)->alg == hmac_to_hash(state->alg))
     _(ensures (&state->inner)->alg == (&state->inner_just_key)->alg)
@@ -461,7 +465,7 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(maintains is_sslv3(state->alg)   ==> (&state->inner_just_key)->hashState == concatenate(state->key,repeat(0x36,state->block_size)))
     _(writes &state->inner_just_key,&state->inner)
     _(ensures (&state->inner)->hashState == (&state->inner_just_key)->hashState)
-    _(ensures (&state->inner)->valid == (&state->inner_just_key)->valid)
+    _(ensures (&state->inner)->usable == (&state->inner_just_key)->usable)
     _(ensures (&state->inner)->real == (&state->inner_just_key)->real)
     {
         _(ghost \state t = \now())
@@ -482,7 +486,7 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
 
     //memcpy_check(&state->inner, &state->inner_just_key, sizeof(state->inner)); 
 
-    _(ghost state->valid = (&state->inner)->valid)
+    _(ghost state->usable = (&state->inner)->usable)
     _(ghost state->real = (&state->inner)->real)
     _(ghost state->message = deconcatenate((&state->inner_just_key)->hashState.len,(&state->inner)->hashState))
     _(wrap state)
@@ -514,7 +518,7 @@ Verification of SHA512state_st#adm succeeded. [0.03]
 Verification of s2n_hash_state#adm succeeded. [1.73]
 Verification of s2n_hmac_state#adm succeeded. [1.53]
 Verification of xor succeeded. [0.02]
-Verification of valid_num succeeded. [0.01]
+Verification of usable_num succeeded. [0.01]
 Verification of make_num succeeded. [0.03]
 Verification of repeat succeeded. [0.02]
 Verification of concatenate succeeded. [0.02]
