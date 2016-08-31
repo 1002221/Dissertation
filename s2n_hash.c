@@ -9,7 +9,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = repeat(0x0,0))
         _(ghost state->\owns = {&state->hash_ctx})
-        _(ghost state->valid = 1)
+        _(ghost state->usable = 1)
     break;
     case S2N_HASH_MD5:
         _(union_reinterpret &state->hash_ctx.md5)
@@ -17,7 +17,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.md5)->val)
         _(ghost state->\owns = {&state->hash_ctx.md5, &state->hash_ctx})
-        _(ghost state->valid = (&state->hash_ctx.md5)->valid)
+        _(ghost state->usable = (&state->hash_ctx.md5)->usable)
     break;
     case S2N_HASH_SHA1:
         _(union_reinterpret &state->hash_ctx.sha1)
@@ -25,7 +25,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha1)->val)
         _(ghost state->\owns = {&state->hash_ctx.sha1, &state->hash_ctx})
-        _(ghost state->valid = (&state->hash_ctx.sha1)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha1)->usable)
     break;
     case S2N_HASH_SHA224:
         _(union_reinterpret &state->hash_ctx.sha224)
@@ -33,7 +33,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha224)->val)
         _(ghost state->\owns = {&state->hash_ctx.sha224, &state->hash_ctx})
-        _(ghost state->valid = (&state->hash_ctx.sha224)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha224)->usable)
     break;
     case S2N_HASH_SHA256:
         _(union_reinterpret &state->hash_ctx.sha256)
@@ -41,7 +41,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha256)->val)
         _(ghost state->\owns = {&state->hash_ctx.sha256, &state->hash_ctx})
-        _(ghost state->valid = (&state->hash_ctx.sha256)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha256)->usable)
     break;
     case S2N_HASH_SHA384:
         _(union_reinterpret &state->hash_ctx.sha384)
@@ -49,7 +49,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha384)->val)
         _(ghost state->\owns = {&state->hash_ctx.sha384, &state->hash_ctx})
-        _(ghost state->valid = (&state->hash_ctx.sha384)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha384)->usable)
     break;
     case S2N_HASH_SHA512:
         _(union_reinterpret &state->hash_ctx.sha512)
@@ -57,7 +57,7 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha512)->val)
         _(ghost state->\owns = {&state->hash_ctx.sha512, &state->hash_ctx})
-        _(ghost state->valid = (&state->hash_ctx.sha512)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha512)->usable)
     break;
     case S2N_HASH_MD5_SHA1:
         _(union_reinterpret &state->hash_ctx.md5_sha1)
@@ -67,10 +67,10 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.md5_sha1.sha1)->val)
         _(ghost state->\owns = {&state->hash_ctx.md5_sha1, &state->hash_ctx.md5_sha1.sha1, &state->hash_ctx.md5_sha1.md5, &state->hash_ctx})
-        _(ghost state->valid = (&state->hash_ctx.md5_sha1.md5)->valid)
+        _(ghost state->usable = (&state->hash_ctx.md5_sha1.md5)->usable)
         break;
     default:
-        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HASH_INusable_ALGORITHM);
         _(assert 0)
     }
     if (r == 0) {
@@ -121,7 +121,7 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
         _(ghost state->hashState = (&state->hash_ctx.md5_sha1.sha1)->val)
         break;
     default:
-        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HASH_INusable_ALGORITHM);
         _(assert 0)
     }
 
@@ -140,7 +140,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     switch (state->alg) {
     case S2N_HASH_NONE:
         r = 1;
-        _(ghost state->valid = 0)
+        _(ghost state->usable = 0)
         break;
     case S2N_HASH_MD5:
         //eq_check(size, MD5_DIGEST_LENGTH);
@@ -149,7 +149,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         r = MD5_Final(outt, &state->hash_ctx.md5);
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.md5)->val)
-        _(ghost state->valid = (&state->hash_ctx.md5)->valid)
+        _(ghost state->usable = (&state->hash_ctx.md5)->usable)
         break;
     case S2N_HASH_SHA1:
         //eq_check(size, SHA_DIGEST_LENGTH);
@@ -158,7 +158,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         r = SHA1_Final(outt, &state->hash_ctx.sha1);
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha1)->val)
-        _(ghost state->valid = (&state->hash_ctx.sha1)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha1)->usable)
         break;
     case S2N_HASH_SHA224:
         //eq_check(size, SHA224_DIGEST_LENGTH);
@@ -167,7 +167,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         r = SHA224_Final(outt, &state->hash_ctx.sha224);
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha224)->val)
-        _(ghost state->valid = (&state->hash_ctx.sha224)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha224)->usable)
         break;
     case S2N_HASH_SHA256:
         //eq_check(size, SHA256_DIGEST_LENGTH);
@@ -176,7 +176,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         r = SHA256_Final(outt, &state->hash_ctx.sha256);
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha256)->val)
-        _(ghost state->valid = (&state->hash_ctx.sha256)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha256)->usable)
         break;
     case S2N_HASH_SHA384:
         //eq_check(size, SHA384_DIGEST_LENGTH);
@@ -185,7 +185,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         r = SHA384_Final(outt, &state->hash_ctx.sha384);
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha384)->val)
-        _(ghost state->valid = (&state->hash_ctx.sha384)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha384)->usable)
         break;
     case S2N_HASH_SHA512:
         //eq_check(size, SHA512_DIGEST_LENGTH);
@@ -194,7 +194,7 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         r = SHA512_Final(outt, &state->hash_ctx.sha512);
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.sha512)->val)
-        _(ghost state->valid = (&state->hash_ctx.sha512)->valid)
+        _(ghost state->usable = (&state->hash_ctx.sha512)->usable)
         break;
     case S2N_HASH_MD5_SHA1:
         //eq_check(size, MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH);
@@ -203,10 +203,10 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
         r &= MD5_Final2(outt, &state->hash_ctx.md5_sha1.md5);
         _(ghost state->hashState = (&state->hash_ctx.md5_sha1.sha1)->val)
         _(assert state->hashState == (&state->hash_ctx.md5_sha1.md5)->val)
-        _(ghost state->valid = (&state->hash_ctx.md5_sha1.md5)->valid)
+        _(ghost state->usable = (&state->hash_ctx.md5_sha1.md5)->usable)
         break;
     default:
-        //S2N_ERROR(S2N_ERR_HASH_INVALID_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HASH_INusable_ALGORITHM);
         _(assert 0)
     }
 
