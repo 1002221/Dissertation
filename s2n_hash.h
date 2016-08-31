@@ -26,8 +26,8 @@ typedef struct MD5state_st
 	MD5_LONG data[MD5_LBLOCK];
 	unsigned int num;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
 	} MD5_CTX;
 
 typedef struct MD5state_st2
@@ -37,8 +37,8 @@ typedef struct MD5state_st2
 	MD5_LONG data[MD5_LBLOCK];
 	unsigned int num;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
 	} MD5_CTX2;
 
 int MD5_Init(MD5_CTX *c)
@@ -47,7 +47,7 @@ int MD5_Init(MD5_CTX *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
@@ -57,12 +57,12 @@ int MD5_Init2(MD5_CTX2 *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
 int MD5_Update(MD5_CTX *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c) && \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c) && \thread_local_array((uint8_t *)data,len))
@@ -73,7 +73,7 @@ int MD5_Update(MD5_CTX *c, const void *data, size_t len)
 ;
 
 int MD5_Update2(MD5_CTX2 *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c) && \thread_local_array((uint8_t *)data,len) && !(data \in \domain(c)))
     _(writes c)
     _(ensures \wrapped(c) && \thread_local_array((uint8_t *)data,len))
@@ -85,25 +85,25 @@ int MD5_Update2(MD5_CTX2 *c, const void *data, size_t len)
 
 int MD5_Final(void *md, MD5_CTX *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range(_(uint8_t *)md, MD5_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, MD5_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_MD5))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
 int MD5_Final2(void *md, MD5_CTX2 *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range(_(uint8_t *)md,  MD5_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, MD5_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_MD5))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
@@ -122,8 +122,8 @@ typedef struct SHAstate_st
 	SHA_LONG data[SHA_LBLOCK];
 	unsigned int num;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
 	} SHA_CTX;
 
 typedef struct SHAstate_st2
@@ -133,8 +133,8 @@ typedef struct SHAstate_st2
 	SHA_LONG data[SHA_LBLOCK];
 	unsigned int num;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
 	} SHA_CTX2;
 
 int SHA1_Init(SHA_CTX *c)
@@ -143,7 +143,7 @@ int SHA1_Init(SHA_CTX *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
@@ -153,12 +153,12 @@ int SHA1_Init2(SHA_CTX2 *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
 int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c) && \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c)  && \thread_local_array((uint8_t *)data,len))
@@ -169,7 +169,7 @@ int SHA1_Update(SHA_CTX *c, const void *data, size_t len)
 ;
 
 int SHA1_Update2(SHA_CTX2 *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c)&& \thread_local_array((uint8_t *)data,len) && !(data \in \domain(c)))
     _(writes c)
     _(ensures \wrapped(c) && \thread_local_array((uint8_t *)data,len) && !(data \in \domain(c)))
@@ -181,25 +181,25 @@ int SHA1_Update2(SHA_CTX2 *c, const void *data, size_t len)
 
 int SHA1_Final(void *md, SHA_CTX *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range((uint8_t *)md, SHA_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, SHA_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_SHA1))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
 int SHA1_Final2(void *md, SHA_CTX2 *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range(md,SHA_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, SHA_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_SHA1))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
@@ -210,8 +210,8 @@ typedef struct SHA224state_st
 	SHA_LONG data[SHA_LBLOCK];
 	unsigned int num,md_len;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
 	} SHA224_CTX;
 
 typedef struct SHA256state_st
@@ -221,8 +221,8 @@ typedef struct SHA256state_st
 	SHA_LONG data[SHA_LBLOCK];
 	unsigned int num,md_len;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
 	} SHA256_CTX;
 
 int SHA224_Init(SHA224_CTX *c)
@@ -231,12 +231,12 @@ int SHA224_Init(SHA224_CTX *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
 int SHA224_Update(SHA224_CTX *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c) && \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c) && \thread_local_array((uint8_t *)data,len))
@@ -248,13 +248,13 @@ int SHA224_Update(SHA224_CTX *c, const void *data, size_t len)
 
 int SHA224_Final(void *md, SHA224_CTX *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range(_(uint8_t *)md, SHA224_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, SHA224_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_SHA224))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
@@ -264,12 +264,12 @@ int SHA256_Init(SHA256_CTX *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
 int SHA256_Update(SHA256_CTX *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c) && \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c) && \thread_local_array((uint8_t *)data,len))
@@ -281,13 +281,13 @@ int SHA256_Update(SHA256_CTX *c, const void *data, size_t len)
 
 int SHA256_Final(void *md, SHA256_CTX *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range(_(uint8_t *)md, SHA256_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, SHA256_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_SHA256))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
@@ -305,8 +305,8 @@ typedef struct SHA384state_st
     } u;
     unsigned int num,md_len;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
     } SHA384_CTX;
 
 typedef struct SHA512state_st
@@ -320,8 +320,8 @@ typedef struct SHA512state_st
     } u;
     unsigned int num,md_len;
     _(ghost Num val)
-    _(ghost \bool valid)
-    _(invariant valid_num(val))
+    _(ghost \bool usable)
+    _(invariant usable_num(val))
     } SHA512_CTX;
 
 int SHA384_Init(SHA384_CTX *c)
@@ -330,12 +330,12 @@ int SHA384_Init(SHA384_CTX *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
 int SHA384_Update(SHA384_CTX *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c) && \thread_local_array((uint8_t *)data,len))
     _(writes c)
     _(ensures \wrapped(c) && \thread_local_array((uint8_t *)data,len))
@@ -347,13 +347,13 @@ int SHA384_Update(SHA384_CTX *c, const void *data, size_t len)
 
 int SHA384_Final(void *md, SHA384_CTX *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range(_(uint8_t *)md, SHA384_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, SHA384_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_SHA384))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
@@ -363,14 +363,14 @@ int SHA512_Init(SHA512_CTX *c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures c->val == repeat(0x0,0))
-    _(ensures c->valid)
+    _(ensures c->usable)
     _(decreases 0)
 ;
 
 int SHA512_Update(SHA512_CTX *c, const void *data, size_t len)
-    _(maintains c->valid)
+    _(maintains c->usable)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes c)
     _(ensures \wrapped(c) && \thread_local_array((uint8_t *)data,len))
     _(ensures \result == 1)
@@ -381,13 +381,13 @@ int SHA512_Update(SHA512_CTX *c, const void *data, size_t len)
 
 int SHA512_Final(void *md, SHA512_CTX *c)
     _(requires \wrapped(c))
-    _(requires c->valid)
+    _(requires c->usable)
     _(writes \array_range(_(uint8_t *)md, SHA512_DIGEST_LENGTH), c)
     _(ensures \wrapped(c))
     _(ensures \result == 1)
     _(ensures make_num((uint8_t *)md, SHA512_DIGEST_LENGTH) == hashVal(\old(c->val),S2N_HASH_SHA512))
     _(ensures c->val == repeat(0x0,0))
-    _(ensures !c->valid)
+    _(ensures !c->usable)
     _(decreases 0)
 ;
 
@@ -407,26 +407,26 @@ typedef _(dynamic_owns) struct s2n_hash_state {
     } hash_ctx;
     _(ghost \bool real)
     _(ghost Num hashState)
-    _(invariant real ==> valid_num(hashState))
-    _(ghost \bool valid)
+    _(invariant real ==> usable_num(hashState))
+    _(ghost \bool usable)
     _(invariant real ==> is_valid_hash(alg))
     _(invariant real && alg == S2N_HASH_NONE ==> hashState == repeat(0x0,0))
     _(invariant real && alg == S2N_HASH_MD5 ==> \union_active(&hash_ctx.md5) && \mine(&hash_ctx.md5) && 
-        hashState == (&hash_ctx.md5)->val && valid == (&hash_ctx.md5)->valid)
+        hashState == (&hash_ctx.md5)->val && usable == (&hash_ctx.md5)->usable)
     _(invariant real && alg == S2N_HASH_SHA1 ==> \union_active(&hash_ctx.sha1) && \mine(&hash_ctx.sha1) && 
-        hashState == (&hash_ctx.sha1)->val && valid == (&hash_ctx.sha1)->valid)
+        hashState == (&hash_ctx.sha1)->val && usable == (&hash_ctx.sha1)->usable)
     _(invariant real && alg == S2N_HASH_SHA224 ==> \union_active(&hash_ctx.sha224) && \mine(&hash_ctx.sha224) && 
-        hashState == (&hash_ctx.sha224)->val && valid == (&hash_ctx.sha224)->valid)
+        hashState == (&hash_ctx.sha224)->val && usable == (&hash_ctx.sha224)->usable)
     _(invariant real && alg == S2N_HASH_SHA256 ==> \union_active(&hash_ctx.sha256) && \mine(&hash_ctx.sha256) && 
-        hashState == (&hash_ctx.sha256)->val && valid == (&hash_ctx.sha256)->valid)
+        hashState == (&hash_ctx.sha256)->val && usable == (&hash_ctx.sha256)->usable)
     _(invariant real && alg == S2N_HASH_SHA384 ==> \union_active(&hash_ctx.sha384) && \mine(&hash_ctx.sha384) && 
-        hashState == (&hash_ctx.sha384)->val && valid == (&hash_ctx.sha384)->valid)
+        hashState == (&hash_ctx.sha384)->val && usable == (&hash_ctx.sha384)->usable)
     _(invariant real && alg == S2N_HASH_SHA512 ==> \union_active(&hash_ctx.sha512) && \mine(&hash_ctx.sha512) && 
-        hashState == (&hash_ctx.sha512)->val && valid == (&hash_ctx.sha512)->valid)
+        hashState == (&hash_ctx.sha512)->val && usable == (&hash_ctx.sha512)->usable)
     _(invariant real && alg == S2N_HASH_MD5_SHA1 ==> \union_active(&hash_ctx.md5_sha1) && \mine(&hash_ctx.md5_sha1) && 
         \mine(&hash_ctx.md5_sha1.sha1) && \mine(&hash_ctx.md5_sha1.md5) && hashState == (&hash_ctx.md5_sha1.md5)->val && 
-        hashState == (&hash_ctx.md5_sha1.sha1)->val && valid == (&hash_ctx.md5_sha1.md5)->valid && valid == 
-        (&hash_ctx.md5_sha1.sha1)->valid)
+        hashState == (&hash_ctx.md5_sha1.sha1)->val && usable == (&hash_ctx.md5_sha1.md5)->usable && usable == 
+        (&hash_ctx.md5_sha1.sha1)->usable)
     _(invariant \mine(&hash_ctx))
 };
 
@@ -476,21 +476,21 @@ _(ghost int hash_state_destroy(struct s2n_hash_state *s)
     _(ensures \extent_mutable(s))
     _(ensures \unchanged(s->alg))
     _(ensures \unchanged(s->hashState))
-    _(ensures \unchanged(s->valid))
-    _(ensures s->alg == S2N_HASH_MD5 ==> \union_active(&s->hash_ctx.md5) && \unchanged((&s->hash_ctx.md5)->valid) && 
+    _(ensures \unchanged(s->usable))
+    _(ensures s->alg == S2N_HASH_MD5 ==> \union_active(&s->hash_ctx.md5) && \unchanged((&s->hash_ctx.md5)->usable) && 
         \unchanged((&s->hash_ctx.md5)->val))
-    _(ensures s->alg == S2N_HASH_SHA1 ==> \union_active(&s->hash_ctx.sha1) && \unchanged((&s->hash_ctx.sha1)->valid) && 
+    _(ensures s->alg == S2N_HASH_SHA1 ==> \union_active(&s->hash_ctx.sha1) && \unchanged((&s->hash_ctx.sha1)->usable) && 
         \unchanged((&s->hash_ctx.sha1)->val))
-    _(ensures s->alg == S2N_HASH_SHA224 ==> \union_active(&s->hash_ctx.sha224) && \unchanged((&s->hash_ctx.sha224)->valid) && 
+    _(ensures s->alg == S2N_HASH_SHA224 ==> \union_active(&s->hash_ctx.sha224) && \unchanged((&s->hash_ctx.sha224)->usable) && 
         \unchanged((&s->hash_ctx.sha224)->val))
-    _(ensures s->alg == S2N_HASH_SHA256 ==> \union_active(&s->hash_ctx.sha256) && \unchanged((&s->hash_ctx.sha256)->valid) && 
+    _(ensures s->alg == S2N_HASH_SHA256 ==> \union_active(&s->hash_ctx.sha256) && \unchanged((&s->hash_ctx.sha256)->usable) && 
         \unchanged((&s->hash_ctx.sha256)->val))
-    _(ensures s->alg == S2N_HASH_SHA384 ==> \union_active(&s->hash_ctx.sha384) && \unchanged((&s->hash_ctx.sha384)->valid) && 
+    _(ensures s->alg == S2N_HASH_SHA384 ==> \union_active(&s->hash_ctx.sha384) && \unchanged((&s->hash_ctx.sha384)->usable) && 
         \unchanged((&s->hash_ctx.sha384)->val))
-    _(ensures s->alg == S2N_HASH_SHA512 ==> \union_active(&s->hash_ctx.sha512) && \unchanged((&s->hash_ctx.sha512)->valid) && 
+    _(ensures s->alg == S2N_HASH_SHA512 ==> \union_active(&s->hash_ctx.sha512) && \unchanged((&s->hash_ctx.sha512)->usable) && 
         \unchanged((&s->hash_ctx.sha512)->val))
-    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \union_active(&s->hash_ctx.md5_sha1) && \unchanged((&s->hash_ctx.md5_sha1.md5)->valid) && 
-        \unchanged((&s->hash_ctx.md5_sha1.sha1)->valid) && \unchanged((&s->hash_ctx.md5_sha1.md5)->val) && \unchanged((&s->hash_ctx.md5_sha1.sha1)->val))
+    _(ensures s->alg == S2N_HASH_MD5_SHA1 ==> \union_active(&s->hash_ctx.md5_sha1) && \unchanged((&s->hash_ctx.md5_sha1.md5)->usable) && 
+        \unchanged((&s->hash_ctx.md5_sha1.sha1)->usable) && \unchanged((&s->hash_ctx.md5_sha1.md5)->val) && \unchanged((&s->hash_ctx.md5_sha1.sha1)->val))
     _(ensures \unchanged(s->real))
     _(decreases 0)
 ;)
@@ -548,13 +548,13 @@ extern int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
     _(ensures state->alg == alg)
     _(ensures \result == 0)
     _(ensures state->hashState == repeat(0x0,0))
-    _(ensures state->valid)
+    _(ensures state->usable)
     _(ensures state->real)
     _(decreases 0)
 ;
 
 extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_t size)
-    _(maintains state->valid)
+    _(maintains state->usable)
     _(maintains \wrapped(state))
     _(requires \thread_local_array((uint8_t*)in,size))
     _(requires !(in \in \domain(state)))
@@ -571,7 +571,7 @@ extern int s2n_hash_update(struct s2n_hash_state *state, const void *in, uint32_
 extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     _(requires \wrapped(state))
     _(requires size == alg_digest_size(state->alg))
-    _(requires state->valid)
+    _(requires state->usable)
     _(writes state, \array_range(_(uint8_t *)outt,size))
     _(ensures \result == 0)
     _(ensures \unchanged(state->alg))
@@ -582,7 +582,7 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
         concatenate(hashVal(\old(state->hashState),S2N_HASH_MD5),hashVal(\old(state->hashState),S2N_HASH_SHA1)))
     _(ensures state->hashState == repeat(0x0,0))
     _(ensures !state->alg ==> make_num((uint8_t *)outt,size) == \old(make_num((uint8_t *)outt,size)))
-    _(ensures !state->valid)
+    _(ensures !state->usable)
     _(ensures \result == 0)
     _(maintains state->real)
     _(decreases 0)
@@ -593,7 +593,7 @@ extern int s2n_hash_reset(struct s2n_hash_state *state)
     _(writes state)
     _(ensures \unchanged(state->alg))
     _(ensures \wrapped(state))
-    _(ensures state->valid)
+    _(ensures state->usable)
     _(ensures state->hashState == repeat(0x0,0))
     _(ensures \result == 0)
     _(maintains state->real)
@@ -603,11 +603,11 @@ extern int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
     _(requires \extent_mutable(to))
     _(requires \wrapped(from))
     _(requires from != to)
-    _(requires from->valid)
+    _(requires from->usable)
     _(writes \extent(to),from)
     _(ensures to->hashState == from->hashState)
     _(ensures \wrapped(to))
-    _(ensures to->valid)
+    _(ensures to->usable)
     _(requires from->real)
     _(ensures to->real)
     _(ensures \result == 0)
