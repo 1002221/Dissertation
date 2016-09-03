@@ -23,6 +23,7 @@ _(def \bool is_valid_hash(s2n_hash_algorithm alg)
 /*This will be used in s2n_hash_digest. To keep track of what's happened to the string we've hashed the context onto, we use the function `hashVal'. */
 _(ghost _(pure) Num hashVal(Num n, s2n_hash_algorithm alg)
   _(ensures \result.len == alg_digest_size(alg))
+  _(ensures \result == concatenate(hashVal(n, S2N_HASH_MD5), hashVal(n, S2N_HASH_SHA1)))
   _(decreases 0))
 
 /*To each context we add a ghost Num field `val' which stores the abstract value of that context, and a ghost boolean field `valid' that indicates whether it's valid or whether it needs to be reset before being used.*/
@@ -371,12 +372,8 @@ extern int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t si
     _(ensures \result == 0)
     _(ensures \unchanged(state->alg))
     _(ensures \wrapped(state))
-    _(ensures state->alg && state->alg != S2N_HASH_MD5_SHA1 ==> make_num((uint8_t *)outt, size) == 
-        hashVal(\old(state->hashState), state->alg))
-    _(ensures state->alg == S2N_HASH_MD5_SHA1 ==> make_num((uint8_t *)outt, size) == 
-        concatenate(hashVal(\old(state->hashState), S2N_HASH_MD5), hashVal(\old(state->hashState), S2N_HASH_SHA1)))
+    _(ensures make_num((uint8_t *)outt, size) == hashVal(\old(state->hashState), state->alg))
     _(ensures state->hashState == repeat(0x0, 0))
-    //_(ensures !state->alg ==> make_num((uint8_t *)outt,size) == \old(make_num((uint8_t *)outt,size)))
     _(ensures \result == 0)
     _(decreases 0)
 ;
