@@ -19,21 +19,25 @@
 
 #define SYSTEM_PAGE_SIZE() 394857
 
-#define GUARD( x )      if ( (x) < 0 ) return -1
+#define GUARD( x )      if ( (x) < 0 ) return -1 //put in separate file, (safety?)
 #define GUARD_PTR( x )  if ( (x) < 0 ) return NULL
 
-#define notnull_check( ptr )    do { if ( (ptr) == NULL ) { return -1; } }                          while(0)
-#define memcpy_check( d, s, n ) do { if ( (n) ) { notnull_check( (d) ); memcpy( (d), (s), (n)); } } while(0)
-#define memset_check( d, c, n ) do { if ( (n) ) { notnull_check( (d) ); memset( (d), (c), (n)); } } while(0)
+#define IPAD repeat(0x36,state->block_size)
+#define OPAD repeat(0x5c,state->block_size)
+#define Kprime num_resize(state->key,state->block_size)
+#define Kprime2 num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size)
+#define H(NAME) hashVal(NAME ## ,hmac_to_hash(state->alg))
+#define H1(NAME) hashVal(NAME ## ,hmac_to_hash(state->alg))
+#define L state->block_size
+#define M state->message
+#define _IPAD repeat(0x36,block_size)
+#define _OPAD repeat(0x5c,block_size)
+#define _Kprime num_resize(key,block_size)
+#define _Kprime2 num_resize(hashVal(key,hmac_to_hash(alg)),block_size)
+#define _L block_size
+#define _M message
 
-#define gte_check(n, min)  do { if ( (n) < min ) { return -1; /*S2N_ERROR(S2N_ERR_SAFETY);*/ } } while(0)
-#define lte_check(n, max)  do { if ( (n) > max ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define gt_check(n, min)  do { if ( (n) <= min ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define lt_check(n, max)  do { if ( (n) >= max ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define eq_check(a, b)  do { if ( (a) != (b) ) { return -1;/*S2N_ERROR(S2N_ERR_SAFETY);*/ } } while(0)
-#define ne_check(a, b)  do { if ( (a) == (b) ) { S2N_ERROR(S2N_ERR_SAFETY); } } while(0)
-#define inclusive_range_check( low, n, high )  gte_check(n, low); lte_check(n, high)
-#define exclusive_range_check( low, n, high )  gt_check(n, low); lt_check(n, high)
+#define UNCHANGED_HMAC_ALG_KEY \unchanged(state->alg) && \unchanged(state->key)
 
 uint8_t *  memset(uint8_t * dst, uint8_t val, size_t size)
        _(requires \mutable_array(dst,size))
@@ -59,126 +63,100 @@ struct s2n_hmac_state {
     s2n_hmac_algorithm alg;
 
     uint16_t hash_block_size;
+    _(invariant hash_block_size == hash_block_size_alg(alg))
     uint32_t currently_in_hash_block;
     uint16_t block_size;
+    _(invariant _L == block_size_alg(alg))
     uint8_t digest_size;
-    _(ghost \bool usable)
-    _(invariant usable ==> (&inner)->usable)
-    _(invariant (&inner_just_key)->usable)
-    _(invariant is_sslv3(alg) ==> (&outer)->usable)
+    _(invariant digest_size == digest_size_alg(alg))
+
     _(ghost Num key)
-    _(ghost Num message)
-    _(invariant real ==> usable_num(message))
-    _(invariant usable ==> concatenate((&inner_just_key)->hashState,message) == (&inner)->hashState)
+    _(invariant valid_num(key))
+
+    _(ghost \bool valid)
+    _(invariant valid ==> (&inner)->valid)
+    _(invariant (&inner_just_key)->valid)
+    _(invariant is_sslv3(alg) ==> (&outer)->valid)
+
     struct s2n_hash_state inner;
     struct s2n_hash_state inner_just_key;
     struct s2n_hash_state outer;
-    _(ghost \bool real)
-    _(invariant usable ==> real)
-    _(invariant (&inner_just_key)->real && (&outer)->real)
-    _(invariant real ==> (&inner)->real)
-    _(invariant key.len <= block_size && alg && !is_sslv3(alg)  ==> 
-        (&inner_just_key)->hashState == xor(num_resize(key,block_size),repeat(0x36,block_size)))
-    _(invariant key.len > block_size && alg && !is_sslv3(alg)  ==> 
-        (&inner_just_key)->hashState == xor(num_resize(hashVal(key,hmac_to_hash(alg)),block_size),repeat(0x36,block_size)))
-    _(invariant !alg ==> (&inner_just_key)->hashState == repeat(0x0,0))
+    
+    _(ghost Num _M)
+    _(invariant valid ==> valid_num(_M))
+    _(invariant valid ==> concatenate((&inner_just_key)->hashState,_M) == (&inner)->hashState)
+    
+    _(invariant key.len <= block_size && !is_sslv3(alg)  ==> (&inner_just_key)->hashState == xor(_Kprime,_IPAD))
+    _(invariant key.len > block_size && !is_sslv3(alg)  ==> (&inner_just_key)->hashState == xor(_Kprime2,_IPAD))
+    //_(invariant !alg ==> (&inner_just_key)->hashState == repeat(0x0,0))
     _(invariant !is_sslv3(alg)  ==> (&outer)->hashState == repeat(0x0,0))
-    _(invariant is_sslv3(alg)   ==> (&inner_just_key)->hashState == concatenate(key,repeat(0x36,block_size)))
-    _(invariant is_sslv3(alg) ==> (&outer)->hashState == concatenate(key,repeat(0x5c,block_size)))
+    _(invariant is_sslv3(alg)   ==> (&inner_just_key)->hashState == concatenate(key,_IPAD))
+    _(invariant is_sslv3(alg) ==> (&outer)->hashState == concatenate(key,_OPAD))
     /* key needs to be as large as the biggest block size */
     uint8_t xor_pad[128];
-    _(invariant key.len>block_size && alg && !is_sslv3(alg) ==> 
-        make_num(xor_pad,block_size) == xor(num_resize(hashVal(key,hmac_to_hash(alg)),block_size),repeat(0x5c,block_size)))
-    _(invariant key.len>block_size && !alg && !is_sslv3(alg) ==> make_num(xor_pad,block_size) == repeat(0x5c,block_size))
-    _(invariant key.len<=block_size && !is_sslv3(alg) ==> 
-        make_num(xor_pad,block_size) == xor(num_resize(key,block_size),repeat(0x5c,block_size)))
-    _(invariant is_sslv3(alg) ==> make_num(xor_pad,block_size) == repeat(0x5c,block_size))
+    _(invariant key.len>_L && alg && !is_sslv3(alg) ==> make_num(xor_pad,_L) == xor(_Kprime2,_OPAD))
+    _(invariant key.len>_L && !alg && !is_sslv3(alg) ==> make_num(xor_pad,_L) == _OPAD)
+    _(invariant key.len<=_L && !is_sslv3(alg) ==> make_num(xor_pad,_L) == xor(_Kprime,_OPAD))
+    _(invariant is_sslv3(alg) ==> make_num(xor_pad,_L) == _OPAD)
     /* For storing the inner digest */
     uint8_t digest_pad[SHA512_DIGEST_LENGTH];
     _(invariant alg>=0 && alg <= 8)
-    _(invariant real==>(&inner)->alg == hmac_to_hash(alg))
+    _(invariant valid ==>(&inner)->alg == hmac_to_hash(alg))
     _(invariant (&inner_just_key)->alg == hmac_to_hash(alg))
     _(invariant (&outer)->alg == hmac_to_hash(alg))
     _(invariant \mine(&inner) && \mine(&outer) && \mine(&inner_just_key))
-    _(invariant digest_size == digest_size_alg(alg))
-    _(invariant hash_block_size == hash_block_size_alg(alg))
-    _(invariant block_size == block_size_alg(alg))
 };
+
+#define conditionalwrap(state,alg)\
+    if((state)->valid){\
+    _(wrap &(state)->hash_ctx. ## alg) \
+        _(wrap &(state)->hash_ctx) \
+        _(ghost (state)->\owns = {&(state)->hash_ctx. ## alg, &(state)->hash_ctx})} \
+    else {\
+        _(wrap &(state)->hash_ctx) \
+        _(ghost (state)->\owns = {&(state)->hash_ctx})} \
+
+#define wrap_inners(state,alg)\
+    _(wrap &(&state->inner_just_key)->hash_ctx. ## alg) \
+    _(wrap &(&state->inner_just_key)->hash_ctx) \
+    _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx. ## alg, &(&state->inner_just_key)->hash_ctx}) \
+    _(wrap &(&state->inner)->hash_ctx. ## alg) \
+    _(wrap &(&state->inner)->hash_ctx) \
+    _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx. ## alg, &(&state->inner)->hash_ctx}) \
+
+#define wrap_none(state)\
+    _(wrap &(state)->hash_ctx) \
+        _(ghost (state)->\owns = {&(state)->hash_ctx}) \
 
 #define wrap_hmac_state(state) {switch(hmac_to_hash(state->alg)){ \
     case S2N_HASH_NONE: \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx}) \
+        wrap_none((&state->inner)) \
+        wrap_none((&state->inner_just_key)) \
+        wrap_none((&state->outer)) \
     break; \
     case S2N_HASH_MD5: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.md5) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.md5, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.md5) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.md5, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.md5) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.md5, &(&state->outer)->hash_ctx}) \
+        wrap_inners(state,md5)\
+        conditionalwrap((&state->outer),md5)\
         break; \
     case S2N_HASH_SHA1: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha1) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha1, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha1) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha1, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha1) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha1, &(&state->outer)->hash_ctx}) \
+        wrap_inners(state,sha1)\
+        conditionalwrap((&state->outer),sha1)\
     break; \
     case S2N_HASH_SHA224: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha224) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha224, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha224) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha224, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha224) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha224, &(&state->outer)->hash_ctx}) \
+        wrap_inners(state,sha224)\
+        conditionalwrap((&state->outer),sha224)\
     break; \
     case S2N_HASH_SHA256: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha256) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha256, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha256) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha256, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha256) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha256, &(&state->outer)->hash_ctx}) \
+        wrap_inners(state,sha256)\
+        conditionalwrap((&state->outer),sha256)\
     break; \
     case S2N_HASH_SHA384: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha384) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha384, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha384) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha384, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha384) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha384, &(&state->outer)->hash_ctx}) \
+        wrap_inners(state,sha384)\
+        conditionalwrap((&state->outer),sha384)\
     break; \
     case S2N_HASH_SHA512: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha512) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha512, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha512) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha512, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha512) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha512, &(&state->outer)->hash_ctx}) \
+        wrap_inners(state,sha512)\
+        conditionalwrap((&state->outer),sha512)\
     break; \
     default: _(assert 0)} \
     _(wrap &state->inner_just_key) \
@@ -187,102 +165,9 @@ struct s2n_hmac_state {
     _(ghost state->\owns = {&state->inner_just_key, &state->inner, &state->outer}) \
     _(wrap state)}
 
-#define wrap_hash_states(state) {switch(hmac_to_hash(state->alg)){ \
-    case S2N_HASH_NONE: \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx}) \
-    break; \
-    case S2N_HASH_MD5: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.md5) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.md5, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.md5) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.md5, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.md5) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.md5, &(&state->outer)->hash_ctx}) \
-        break; \
-    case S2N_HASH_SHA1: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha1) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha1, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha1) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha1, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha1) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha1, &(&state->outer)->hash_ctx}) \
-    break; \
-    case S2N_HASH_SHA224: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha224) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha224, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha224) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha224, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha224) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha224, &(&state->outer)->hash_ctx}) \
-    break; \
-    case S2N_HASH_SHA256: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha256) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha256, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha256) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha256, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha256) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha256, &(&state->outer)->hash_ctx}) \
-    break; \
-    case S2N_HASH_SHA384: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha384) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha384, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha384) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha384, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha384) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha384, &(&state->outer)->hash_ctx}) \
-    break; \
-    case S2N_HASH_SHA512: \
-        _(wrap &(&state->inner_just_key)->hash_ctx.sha512) \
-        _(wrap &(&state->inner_just_key)->hash_ctx) \
-        _(ghost (&state->inner_just_key)->\owns = {&(&state->inner_just_key)->hash_ctx.sha512, &(&state->inner_just_key)->hash_ctx}) \
-        _(wrap &(&state->inner)->hash_ctx.sha512) \
-        _(wrap &(&state->inner)->hash_ctx) \
-        _(ghost (&state->inner)->\owns = {&(&state->inner)->hash_ctx.sha512, &(&state->inner)->hash_ctx}) \
-        _(wrap &(&state->outer)->hash_ctx.sha512) \
-        _(wrap &(&state->outer)->hash_ctx) \
-        _(ghost (&state->outer)->\owns = {&(&state->outer)->hash_ctx.sha512, &(&state->outer)->hash_ctx}) \
-    break; \
-    default: _(assert 0)} \
-    _(wrap &state->inner_just_key) \
-    _(wrap &state->inner) \
-    _(wrap &state->outer) \
-    _(ghost state->\owns = {&state->inner_just_key, &state->inner, &state->outer})}
-
 extern int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
     _(requires alg >= 0 && alg <= 8)
 ;
-
-int s2n_hmac_digest_size(s2n_hmac_algorithm alg)
-{
-    if (alg == S2N_HMAC_SSLv3_MD5) {
-        alg = S2N_HMAC_MD5;
-    }
-    if (alg == S2N_HMAC_SSLv3_SHA1) {
-        alg = S2N_HMAC_SHA1;
-    }
-
-    return s2n_hash_digest_size((s2n_hash_algorithm) alg);
-}
 
 _(def uint16_t block_size_alg(s2n_hmac_algorithm alg) 
 { 
@@ -329,14 +214,12 @@ _(def s2n_hash_algorithm hmac_to_hash(s2n_hmac_algorithm alg)
 
 _(def \bool is_sslv3(s2n_hmac_algorithm alg)
 {
-    if (alg>=7 && alg<=8) return 1;
-    else return 0; 
+    return (alg>=7 && alg<=8); 
 })
 
 _(def \bool is_valid_hmac(s2n_hmac_algorithm alg)
 {
-    if (alg>=0 && alg<=8) return 1;
-    else return 0; 
+    return (alg>=0 && alg<=8); 
 })
 
 extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, const void *key, uint32_t klen)
@@ -344,77 +227,65 @@ extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, c
     _(requires \thread_local_array((uint8_t *)key,klen))
     _(requires is_valid_hmac(alg))
     _(writes \extent(state))
-    _(ensures state->message == repeat(0x0,0))
+    _(ensures state->message == repeat(0x0, 0))
     _(ensures \result == 0)
-    _(ensures \wrapped(state))
+    _(ensures WRAPPED_VALID(state))
     _(ensures state->alg == alg)
-    _(ensures state->key == make_num((uint8_t *)key,klen))
-    _(ensures state->usable)
-    _(ensures state->real)
+    _(ensures state->key == make_num((uint8_t *)key, klen))
     _(decreases 0)
     ;
   
 extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
-    _(maintains \wrapped(state))
-    _(maintains state->usable)
-    _(maintains state->real)
-    _(requires \thread_local_array((uint8_t *)in,size))
+    _(maintains WRAPPED_VALID(state))
+    _(requires \thread_local_array((uint8_t *)in, size))
+    _(requires !(\domain_root(\embedding((uint8_t *)in)) \in \domain(state)))
     _(writes state)
-    _(ensures state->alg ==> state->message == concatenate(\old(state->message),make_num((uint8_t *)in,size)))
-    _(ensures !state->alg ==> state->message == repeat(0x0,0))
-    _(ensures \unchanged(state->alg))
-    _(ensures \unchanged(state->key))
+    _(ensures /*state->alg ==>*/ state->message == concatenate(\old(state->message), make_num((uint8_t *)in, size)))
+    //_(ensures !state->alg ==> state->message == repeat(0x0, 0))
+    _(ensures UNCHANGED_HMAC_ALG_KEY)
     _(ensures \result == 0);
 
 extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
-    _(requires state->usable)
-    _(maintains state->real)
+    _(requires state->valid)
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
-    _(writes state, \array_range(_(uint8_t *)outt, size)) 
-    _(ensures \unchanged(state->alg))
-    _(ensures is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
-        hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
-        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),state->message),
-        hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
-    _(ensures state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,
-        hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),
-        hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),
-        repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
-        repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(state->key,state->block_size),
-        repeat(0x36,state->block_size)),state->message),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
-    _(ensures \unchanged(state->key))
-    _(ensures \unchanged(state->message))
-    _(ensures !state->usable)
+    _(writes state,  \array_range(_(uint8_t *)outt, size)) 
+    _(ensures is_sslv3(state->alg) ==> make_num((uint8_t *)outt, size) == 
+        hashVal(concatenate(concatenate(state->key, OPAD),
+        hashVal(concatenate(concatenate(state->key, IPAD), state->message),
+        hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))
+    _(ensures state->alg && state->key.len>L && !is_sslv3(state->alg) ==> 
+        make_num((uint8_t *)outt, size) == hashVal(concatenate(xor(Kprime2, OPAD),
+        hashVal(concatenate(xor(Kprime2, IPAD), state->message), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
+    _(ensures state->alg && state->key.len<=L && !is_sslv3(state->alg) ==> 
+        make_num((uint8_t *)outt, size) == hashVal(concatenate(xor(Kprime, OPAD), hashVal(concatenate(xor(Kprime,
+        IPAD), state->message), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
+    _(ensures !state->alg ==> make_num((uint8_t *)outt, size) == repeat(0x0, 0))
+    _(ensures UNCHANGED_HMAC_ALG_KEY)
+    _(ensures \unchanged(M))
+    _(ensures !state->valid)
     _(ensures \result == 0)
 ;
 
 extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
-    _(requires state->usable)
-    _(ensures !state->usable)
-    _(maintains state->real)
+    _(requires state->valid)
     _(requires size == alg_digest_size(hmac_to_hash(state->alg)))
     _(requires !is_sslv3(state->alg))
-    _(writes state, \array_range(_(uint8_t *)outt,size))
-    _(ensures is_sslv3(state->alg) ==> make_num((uint8_t *)outt,size) == 
-        hashVal(concatenate(concatenate(state->key,repeat(0x5c,state->block_size)),
-        hashVal(concatenate(concatenate(state->key,repeat(0x36,state->block_size)),\old(state->message)),
-        hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))
-    _(ensures state->alg && state->key.len>state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(hashVal(state->key,
-        hmac_to_hash(state->alg)),state->block_size),repeat(0x5c,state->block_size)),
-        hashVal(concatenate(xor(num_resize(hashVal(state->key,hmac_to_hash(state->alg)),state->block_size),
-        repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures state->alg && state->key.len<=state->block_size && !is_sslv3(state->alg) ==> 
-        make_num((uint8_t *)outt,size) == hashVal(concatenate(xor(num_resize(state->key,state->block_size),
-        repeat(0x5c,state->block_size)),hashVal(concatenate(xor(num_resize(state->key,state->block_size),
-        repeat(0x36,state->block_size)),\old(state->message)),hmac_to_hash(state->alg))),hmac_to_hash(state->alg)))  
-    _(ensures !state->alg ==> make_num((uint8_t *)outt,size) == repeat(0x0,0))
+    _(writes state, \array_range(_(uint8_t *)outt, size))
+    _(ensures is_sslv3(state->alg) ==> make_num((uint8_t *)outt, size) == 
+        hashVal(concatenate(concatenate(state->key, OPAD),
+        hashVal(concatenate(concatenate(state->key, IPAD), \old(M)),
+        hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))
+    _(ensures state->alg && state->key.len>L && !is_sslv3(state->alg) ==> 
+        make_num((uint8_t *)outt, size) == hashVal(concatenate(xor(Kprime2, OPAD),
+        hashVal(concatenate(xor(Kprime2,
+        IPAD), \old(M)), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
+    _(ensures state->alg && state->key.len<=L && !is_sslv3(state->alg) ==> 
+        make_num((uint8_t *)outt, size) == hashVal(concatenate(xor(Kprime,
+        OPAD), hashVal(concatenate(xor(Kprime,
+        IPAD), \old(M)), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
+    _(ensures !state->alg ==> make_num((uint8_t *)outt, size) == repeat(0x0, 0))
     _(ensures \result == 0)   
     ;
 
@@ -439,22 +310,27 @@ int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
 
 extern int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(maintains \wrapped(state))
+    _(requires is_valid_hmac(state->alg))
     _(writes state)
-    _(ensures state->message == repeat(0x0,0))
-    _(ensures \unchanged(state->alg))
-    _(ensures \unchanged(state->key))
+    _(ensures M == repeat(0x0, 0))
+    _(ensures UNCHANGED_HMAC_ALG_KEY)
     _(ensures \result == 0)
-    _(ensures state->usable)
-    _(ensures state->real)
+    _(ensures state->valid)
     _(decreases 0) 
 ;
+
+#define mega_ensures(in1, in2) \
+    _(ensures hmac_to_hash(s->alg) == S2N_HASH_ ## in1    ==> \union_active(&(&s->inner)->hash_ctx. ## in2)    && \
+        \union_active(&(&s->outer)->hash_ctx. ## in2)    && \union_active(&(&s->inner_just_key)->hash_ctx. ## in2)    \
+        && \unchanged((&(&s->inner_just_key)->hash_ctx. ## in2)->val)    && \unchanged((&(&s->inner)->hash_ctx. ## in2)->val)    \
+        && \unchanged((&(&s->outer)->hash_ctx. ## in2)->val)    && \unchanged((&(&s->inner_just_key)->hash_ctx. ## in2)->valid)\
+        && \unchanged((&(&s->inner)->hash_ctx. ## in2)->valid)    && \unchanged((&(&s->outer)->hash_ctx. ## in2)->valid))
+  
 
 _(ghost int hmac_state_destroy(struct s2n_hmac_state *s)
     _(requires \wrapped(s) || \mutable(s))
     _(writes s)
-    /*_(ensures \forall size_t i; i<128 ==> \unchanged(s->xor_pad[i]))
-    _(ensures \forall size_t i; i<SHA512_DIGEST_LENGTH ==> \unchanged(s->digest_pad[i]))*/
-    _(ensures /*\unchanged(make_num(s->digest_pad,s->digest_size)) && */\unchanged(make_num(s->xor_pad,s->block_size)))
+    _(ensures \unchanged(make_num(s->xor_pad, s->block_size)))
     _(ensures \extent_fresh(s))
     _(ensures \extent_mutable(s))
     _(ensures \unchanged(s->alg))
@@ -468,59 +344,28 @@ _(ghost int hmac_state_destroy(struct s2n_hmac_state *s)
     _(ensures \unchanged((&s->inner)->hashState))
     _(ensures \unchanged((&s->outer)->hashState))
     _(ensures \unchanged(s->message))
-    _(ensures \unchanged(s->real))
     _(ensures \unchanged((&s->inner_just_key)->hashState))
-    _(ensures \unchanged(s->usable) && \unchanged((&s->inner)->usable) && \unchanged((&s->outer)->usable) && 
-        \unchanged((&s->inner_just_key)->usable))
-    _(ensures \unchanged((&s->inner)->real) && \unchanged((&s->outer)->real) && 
-        \unchanged((&s->inner_just_key)->real))
-    _(ensures hmac_to_hash(s->alg) == S2N_HASH_MD5    ==> \union_active(&(&s->inner)->hash_ctx.md5)    && 
-        \union_active(&(&s->outer)->hash_ctx.md5)    && \union_active(&(&s->inner_just_key)->hash_ctx.md5)    
-        && \unchanged((&(&s->inner_just_key)->hash_ctx.md5)->val)    && \unchanged((&(&s->inner)->hash_ctx.md5)->val)    
-        && \unchanged((&(&s->outer)->hash_ctx.md5)->val)    && \unchanged((&(&s->inner_just_key)->hash_ctx.md5)->usable)    
-        && \unchanged((&(&s->inner)->hash_ctx.md5)->usable)    && \unchanged((&(&s->outer)->hash_ctx.md5)->usable))
-    _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA1   ==> \union_active(&(&s->inner)->hash_ctx.sha1)   && 
-        \union_active(&(&s->outer)->hash_ctx.sha1)   && \union_active(&(&s->inner_just_key)->hash_ctx.sha1)   
-        && \unchanged((&(&s->inner_just_key)->hash_ctx.sha1)->val)   && \unchanged((&(&s->inner)->hash_ctx.sha1)->val)   
-        && \unchanged((&(&s->outer)->hash_ctx.sha1)->val)   && \unchanged((&(&s->inner_just_key)->hash_ctx.sha1)->usable)   
-        && \unchanged((&(&s->inner)->hash_ctx.sha1)->usable)   && \unchanged((&(&s->outer)->hash_ctx.sha1)->usable))
-    _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA224 ==> \union_active(&(&s->inner)->hash_ctx.sha224) && 
-        \union_active(&(&s->outer)->hash_ctx.sha224) && \union_active(&(&s->inner_just_key)->hash_ctx.sha224) && 
-        \unchanged((&(&s->inner_just_key)->hash_ctx.sha224)->val) && \unchanged((&(&s->inner)->hash_ctx.sha224)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha224)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha224)->usable) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha224)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha224)->usable))
-    _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA256 ==> \union_active(&(&s->inner)->hash_ctx.sha256) && 
-        \union_active(&(&s->outer)->hash_ctx.sha256) && \union_active(&(&s->inner_just_key)->hash_ctx.sha256) && 
-        \unchanged((&(&s->inner_just_key)->hash_ctx.sha256)->val) && \unchanged((&(&s->inner)->hash_ctx.sha256)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha256)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha256)->usable) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha256)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha256)->usable))
-    _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA384 ==> \union_active(&(&s->inner)->hash_ctx.sha384) && 
-        \union_active(&(&s->outer)->hash_ctx.sha384) && \union_active(&(&s->inner_just_key)->hash_ctx.sha384) && 
-        \unchanged((&(&s->inner_just_key)->hash_ctx.sha384)->val) && \unchanged((&(&s->inner)->hash_ctx.sha384)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha384)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha384)->usable) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha384)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha384)->usable))
-    _(ensures hmac_to_hash(s->alg) == S2N_HASH_SHA512 ==> \union_active(&(&s->inner)->hash_ctx.sha512) && 
-        \union_active(&(&s->outer)->hash_ctx.sha512) && \union_active(&(&s->inner_just_key)->hash_ctx.sha512) && 
-        \unchanged((&(&s->inner_just_key)->hash_ctx.sha512)->val) && \unchanged((&(&s->inner)->hash_ctx.sha512)->val) && 
-        \unchanged((&(&s->outer)->hash_ctx.sha512)->val) && \unchanged((&(&s->inner_just_key)->hash_ctx.sha512)->usable) && 
-        \unchanged((&(&s->inner)->hash_ctx.sha512)->usable) && \unchanged((&(&s->outer)->hash_ctx.sha512)->usable))
+    _(ensures \unchanged(s->valid) && \unchanged((&s->inner)->valid) && \unchanged((&s->outer)->valid) && 
+        \unchanged((&s->inner_just_key)->valid))
+    mega_ensures(MD5,md5)
+    mega_ensures(SHA1,md5)
+    mega_ensures(SHA224,md5)
+    mega_ensures(SHA256,md5)
+    mega_ensures(SHA384,md5)
+    mega_ensures(SHA512,sha512)
     _(ensures \unchanged(s->key))
-    _(ensures \unchanged(hashVal(s->key,hmac_to_hash(s->alg))))
+    _(ensures \unchanged(hashVal(s->key, hmac_to_hash(s->alg))))
     _(decreases 0)
 ;)
 
 extern int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
-    _(requires \wrapped(from))
-    _(requires \extent_mutable(to))
+    _(maintains WRAPPED_VALID(from))
     _(requires from != to)
-    _(requires from->usable)
-    _(requires from->real)
     _(writes \extent(to), from)
-    _(ensures \wrapped(to))
+    _(ensures WRAPPED_VALID(to))
     _(ensures \result == 0)
-    _(ensures hashState(&to->inner,0) == \old(hashState(&from->inner,0)))
-    _(ensures to->usable)
-    _(ensures to->real)
+    _(ensures to->message == from->message)
+    _(ensures \unchanged(from->message))
 ; 
 
 
