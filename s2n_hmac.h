@@ -16,11 +16,7 @@
 #pragma once
 
 #include "s2n_hash.h"
-
-#define SYSTEM_PAGE_SIZE() 394857
-
-#define GUARD( x )      if ( (x) < 0 ) return -1 //put in separate file, (safety?)
-#define GUARD_PTR( x )  if ( (x) < 0 ) return NULL
+#include "s2n_safety.h"
 
 #define IPAD repeat(0x36,state->block_size)
 #define OPAD repeat(0x5c,state->block_size)
@@ -29,31 +25,14 @@
 #define H(NAME) hashVal(NAME ## ,hmac_to_hash(state->alg))
 #define H1(NAME) hashVal(NAME ## ,hmac_to_hash(state->alg))
 #define L state->block_size
-#define M state->message
+
 #define _IPAD repeat(0x36,block_size)
 #define _OPAD repeat(0x5c,block_size)
 #define _Kprime num_resize(key,block_size)
 #define _Kprime2 num_resize(hashVal(key,hmac_to_hash(alg)),block_size)
 #define _L block_size
-#define _M message
 
 #define UNCHANGED_HMAC_ALG_KEY \unchanged(state->alg) && \unchanged(state->key)
-
-uint8_t *  memset(uint8_t * dst, uint8_t val, size_t size)
-       _(requires \mutable_array(dst,size))
-       _(writes \array_range(dst,size))
-       _(ensures \forall size_t i; i < size ==> dst[i] == val)
-       _(ensures \result == dst)
-;
- 
-uint8_t * memcpy(uint8_t *dst, uint8_t *src, size_t size)
-       _(writes \array_range(dst,size))
-       _(requires \thread_local_array(src,size))
-       _(requires \arrays_disjoint(dst,size, src,size))
-       _(ensures \forall size_t i; i < size ==> dst[i] == \old(src[i]))
-       _(ensures \result == dst)
-       _(decreases 0)
-;
 
 typedef enum { S2N_HMAC_NONE, S2N_HMAC_MD5, S2N_HMAC_SHA1, S2N_HMAC_SHA224, S2N_HMAC_SHA256, S2N_HMAC_SHA384,
     S2N_HMAC_SHA512, S2N_HMAC_SSLv3_MD5, S2N_HMAC_SSLv3_SHA1
@@ -82,9 +61,9 @@ struct s2n_hmac_state {
     struct s2n_hash_state inner_just_key;
     struct s2n_hash_state outer;
     
-    _(ghost Num _M)
-    _(invariant valid ==> valid_num(_M))
-    _(invariant valid ==> concatenate((&inner_just_key)->hashState,_M) == (&inner)->hashState)
+    _(ghost Num message)
+    _(invariant valid ==> valid_num(message))
+    _(invariant valid ==> concatenate((&inner_just_key)->hashState, message) == (&inner)->hashState)
     
     _(invariant key.len <= block_size && !is_sslv3(alg)  ==> (&inner_just_key)->hashState == xor(_Kprime,_IPAD))
     _(invariant key.len > block_size && !is_sslv3(alg)  ==> (&inner_just_key)->hashState == xor(_Kprime2,_IPAD))
@@ -233,17 +212,17 @@ extern int s2n_hmac_init(struct s2n_hmac_state *state, s2n_hmac_algorithm alg, c
     _(ensures state->alg == alg)
     _(ensures state->key == make_num((uint8_t *)key, klen))
     _(decreases 0)
-    ;
+;
   
 extern int s2n_hmac_update(struct s2n_hmac_state *state, const void *in, uint32_t size)
     _(maintains WRAPPED_VALID(state))
     _(requires \thread_local_array((uint8_t *)in, size))
     _(requires !(\domain_root(\embedding((uint8_t *)in)) \in \domain(state)))
     _(writes state)
-    _(ensures /*state->alg ==>*/ state->message == concatenate(\old(state->message), make_num((uint8_t *)in, size)))
-    //_(ensures !state->alg ==> state->message == repeat(0x0, 0))
+    _(ensures state->message == concatenate(\old(state->message), make_num((uint8_t *)in, size)))
     _(ensures UNCHANGED_HMAC_ALG_KEY)
-    _(ensures \result == 0);
+    _(ensures \result == 0)
+;
 
 extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     _(maintains \wrapped(state))
@@ -262,7 +241,7 @@ extern int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t si
         IPAD), state->message), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
     _(ensures !state->alg ==> make_num((uint8_t *)outt, size) == repeat(0x0, 0))
     _(ensures UNCHANGED_HMAC_ALG_KEY)
-    _(ensures \unchanged(M))
+    _(ensures \unchanged(state->message))
     _(ensures !state->valid)
     _(ensures \result == 0)
 ;
@@ -275,44 +254,25 @@ extern int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, 
     _(writes state, \array_range(_(uint8_t *)outt, size))
     _(ensures is_sslv3(state->alg) ==> make_num((uint8_t *)outt, size) == 
         hashVal(concatenate(concatenate(state->key, OPAD),
-        hashVal(concatenate(concatenate(state->key, IPAD), \old(M)),
+        hashVal(concatenate(concatenate(state->key, IPAD), \old(state->message)),
         hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))
     _(ensures state->alg && state->key.len>L && !is_sslv3(state->alg) ==> 
         make_num((uint8_t *)outt, size) == hashVal(concatenate(xor(Kprime2, OPAD),
         hashVal(concatenate(xor(Kprime2,
-        IPAD), \old(M)), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
+        IPAD), \old(state->message)), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
     _(ensures state->alg && state->key.len<=L && !is_sslv3(state->alg) ==> 
         make_num((uint8_t *)outt, size) == hashVal(concatenate(xor(Kprime,
         OPAD), hashVal(concatenate(xor(Kprime,
-        IPAD), \old(M)), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
+        IPAD), \old(state->message)), hmac_to_hash(state->alg))), hmac_to_hash(state->alg)))  
     _(ensures !state->alg ==> make_num((uint8_t *)outt, size) == repeat(0x0, 0))
     _(ensures \result == 0)   
-    ;
-
-/*extern int s2n_constant_time_equals(const uint8_t *a, const uint8_t *b, uint32_t len)
-    _(requires \thread_local_array((uint8_t *)a,len))
-    _(requires \thread_local_array((uint8_t *)b,len))
-    _(ensures (\forall uint8_t i; i<len ==> ((uint8_t *)(a))[i]==((uint8_t *)(b))[i]) ==> \result == 1)
-    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result == 0)
 ;
-
-extern int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
-    _(requires \thread_local_array((uint8_t *)a,len))
-    _(requires \thread_local_array((uint8_t *)b,len))
-    _(ensures (\forall uint8_t i; i<len ==> ((uint8_t *)(a))[i]== ((uint8_t *)(b))[i]) ==> \result == 0)
-    _(ensures (\exists uint8_t i; i<len && ((uint8_t *)(a))[i] != ((uint8_t *)(b))[i]) ==> \result == -1)
-;
-
-int s2n_hmac_digest_verify(const void *a, const void *b, uint32_t len)
-{
-    return 0 - !s2n_constant_time_equals((uint8_t *)a, (uint8_t *)b, len);
-}*/
 
 extern int s2n_hmac_reset(struct s2n_hmac_state *state)
     _(maintains \wrapped(state))
     _(requires is_valid_hmac(state->alg))
     _(writes state)
-    _(ensures M == repeat(0x0, 0))
+    _(ensures state->message == repeat(0x0, 0))
     _(ensures UNCHANGED_HMAC_ALG_KEY)
     _(ensures \result == 0)
     _(ensures state->valid)
