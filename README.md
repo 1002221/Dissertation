@@ -1,10 +1,10 @@
 # Dissertation
 
-This repository contains proofs, written in VCC, about some s2n functions. Specifically, it contains proofs of memory safety and functional correctness for the HMAC construction.
+This folder contains a proof with VCC (a deductive verifier) that s2n (an implementation of the TLS security protocol) correctly implements the HMAC construction. Moreover, this proof includes showing that the code is free from errors such as memory errors and arithmetic overﬂows. Our proof has revealed an error in the (s2n_hmac_digest_two_compression_rounds), which turned out to not be a bug in the current implementation but which could have been a bug in a diﬀerent one.
 
-VCC is a program verifier developed by Microsoft Research - for relevant papers, please visit https://vcc.codeplex.com .
+For relevant papers and installation instructions for VCC, please visit https://vcc.codeplex.com .
 
-I originally carried out this work for my MSc dissertation in 'Mathematics and Foundations of Computer Science' at the University of Oxford in 2016.
+To run this proof, open all the files into a project and verify s2n_hmac.c .
 
 
 
