@@ -1,5 +1,10 @@
 #include "s2n_hash.h"
 
+#define mycomm(in) _(wrap &state->hash_ctx)\
+    _(ghost state->hashState = (&state->hash_ctx. ## in ## )->val)\
+        _(ghost state->\owns = {&state->hash_ctx. ## in ## , &state->hash_ctx})\
+        _(ghost state->valid = (&state->hash_ctx. ## in ## )->valid)
+
 int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
 {
     int r;
@@ -9,68 +14,51 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = repeat(0x0,0))
         _(ghost state->\owns = {&state->hash_ctx})
-        _(ghost state->usable = 1)
+        _(ghost state->valid = 1)
     break;
     case S2N_HASH_MD5:
         _(union_reinterpret &state->hash_ctx.md5)
         r = MD5_Init(&state->hash_ctx.md5);
-        _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.md5)->val)
-        _(ghost state->\owns = {&state->hash_ctx.md5, &state->hash_ctx})
-        _(ghost state->usable = (&state->hash_ctx.md5)->usable)
+        mycomm(md5)
     break;
     case S2N_HASH_SHA1:
         _(union_reinterpret &state->hash_ctx.sha1)
         r = SHA1_Init(&state->hash_ctx.sha1);
-        _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha1)->val)
-        _(ghost state->\owns = {&state->hash_ctx.sha1, &state->hash_ctx})
-        _(ghost state->usable = (&state->hash_ctx.sha1)->usable)
+        mycomm(sha1)
     break;
     case S2N_HASH_SHA224:
         _(union_reinterpret &state->hash_ctx.sha224)
         r = SHA224_Init(&state->hash_ctx.sha224);
-        _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha224)->val)
-        _(ghost state->\owns = {&state->hash_ctx.sha224, &state->hash_ctx})
-        _(ghost state->usable = (&state->hash_ctx.sha224)->usable)
+        mycomm(sha224)
     break;
     case S2N_HASH_SHA256:
         _(union_reinterpret &state->hash_ctx.sha256)
         r = SHA256_Init(&state->hash_ctx.sha256);
-        _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha256)->val)
-        _(ghost state->\owns = {&state->hash_ctx.sha256, &state->hash_ctx})
-        _(ghost state->usable = (&state->hash_ctx.sha256)->usable)
+        mycomm(sha256)
     break;
     case S2N_HASH_SHA384:
         _(union_reinterpret &state->hash_ctx.sha384)
         r = SHA384_Init(&state->hash_ctx.sha384);
-        _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha384)->val)
-        _(ghost state->\owns = {&state->hash_ctx.sha384, &state->hash_ctx})
-        _(ghost state->usable = (&state->hash_ctx.sha384)->usable)
+        mycomm(sha384)
     break;
     case S2N_HASH_SHA512:
         _(union_reinterpret &state->hash_ctx.sha512)
         r = SHA512_Init(&state->hash_ctx.sha512);
-        _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha512)->val)
-        _(ghost state->\owns = {&state->hash_ctx.sha512, &state->hash_ctx})
-        _(ghost state->usable = (&state->hash_ctx.sha512)->usable)
+        mycomm(sha512)
     break;
     case S2N_HASH_MD5_SHA1:
         _(union_reinterpret &state->hash_ctx.md5_sha1)
-        r = SHA1_Init2(&state->hash_ctx.md5_sha1.sha1);
-        r &= MD5_Init2(&state->hash_ctx.md5_sha1.md5);
+        r = SHA1_Init(&state->hash_ctx.md5_sha1.sha1);
+        r &= MD5_Init(&state->hash_ctx.md5_sha1.md5);
         _(wrap &state->hash_ctx.md5_sha1)
         _(wrap &state->hash_ctx)
         _(ghost state->hashState = (&state->hash_ctx.md5_sha1.sha1)->val)
-        _(ghost state->\owns = {&state->hash_ctx.md5_sha1, &state->hash_ctx.md5_sha1.sha1, &state->hash_ctx.md5_sha1.md5, &state->hash_ctx})
-        _(ghost state->usable = (&state->hash_ctx.md5_sha1.md5)->usable)
+        _(ghost state->\owns = {&state->hash_ctx.md5_sha1, &state->hash_ctx.md5_sha1.sha1, 
+            &state->hash_ctx.md5_sha1.md5, &state->hash_ctx})
+        _(ghost state->valid = (&state->hash_ctx.md5_sha1.md5)->valid)
         break;
     default:
-        //S2N_ERROR(S2N_ERR_HASH_INusable_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HASH_INvalid_ALGORITHM);
         _(assert 0)
     }
     if (r == 0) {
@@ -78,21 +66,31 @@ int s2n_hash_init(struct s2n_hash_state *state, s2n_hash_algorithm alg)
         _(assert 0)
     }
     state->alg = alg;
-    _(ghost state->real = 1)
     _(wrap state)
     return 0;
 }
+#undef mycomm
 
 int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t size)
 {
+    //_(assume state->alg != 7)
     int r;
+    _(assert \wrapped_with_deep_domain(state))
+    _(ghost \state o = \now())
     _(unwrap state)
+    _(assert make_num((uint8_t*)data,size) == \at(o,make_num((uint8_t*)data,size)))
     switch (state->alg) {
     case S2N_HASH_NONE:
         r = 1;
-        break;
+        _(ghost \state t = \now())
+        _(ghost state->hashState = concatenate(\at(t,state->hashState), make_num((uint8_t*)data,size)))
+        break; 
     case S2N_HASH_MD5:
+    _(assert make_num((uint8_t*)data,size) == \at(o,make_num((uint8_t*)data,size)))
+
         r = MD5_Update(&state->hash_ctx.md5, data, size);
+    _(assert make_num((uint8_t*)data,size) == \at(o,make_num((uint8_t*)data,size)))
+
         _(ghost state->hashState = (&state->hash_ctx.md5)->val)
         break;
     case S2N_HASH_SHA1:
@@ -116,12 +114,12 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
         _(ghost state->hashState = (&state->hash_ctx.sha512)->val)
         break;
     case S2N_HASH_MD5_SHA1:
-        r = SHA1_Update2(&state->hash_ctx.md5_sha1.sha1, data, size);
-        r = MD5_Update2(&state->hash_ctx.md5_sha1.md5, data, size);
+        r = SHA1_Update(&state->hash_ctx.md5_sha1.sha1, data, size);
+        r = MD5_Update(&state->hash_ctx.md5_sha1.md5, data, size);
         _(ghost state->hashState = (&state->hash_ctx.md5_sha1.sha1)->val)
         break;
     default:
-        //S2N_ERROR(S2N_ERR_HASH_INusable_ALGORITHM);
+        //S2N_ERROR(S2N_ERR_HASH_INvalid_ALGORITHM);
         _(assert 0)
     }
 
@@ -133,6 +131,9 @@ int s2n_hash_update(struct s2n_hash_state *state, const void *data, uint32_t siz
     return 0;
 }
 
+#define mycomm(in) _(ghost {state->hashState = (&state->hash_ctx.md5)->val;\
+    state->valid = (&state->hash_ctx.md5)->valid;})
+
 int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
 {
     int r;
@@ -140,80 +141,50 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
     switch (state->alg) {
     case S2N_HASH_NONE:
         r = 1;
-        _(ghost state->usable = 0)
         break;
     case S2N_HASH_MD5:
-        //eq_check(size, MD5_DIGEST_LENGTH);
-        _(assert size == MD5_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = MD5_Final(outt, &state->hash_ctx.md5);
         _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.md5)->val)
-        _(ghost state->usable = (&state->hash_ctx.md5)->usable)
         break;
     case S2N_HASH_SHA1:
-        //eq_check(size, SHA_DIGEST_LENGTH);
-        _(assert size == SHA_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA1_Final(outt, &state->hash_ctx.sha1);
         _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha1)->val)
-        _(ghost state->usable = (&state->hash_ctx.sha1)->usable)
         break;
     case S2N_HASH_SHA224:
-        //eq_check(size, SHA224_DIGEST_LENGTH);
-        _(assert size == SHA224_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA224_Final(outt, &state->hash_ctx.sha224);
         _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha224)->val)
-        _(ghost state->usable = (&state->hash_ctx.sha224)->usable)
         break;
     case S2N_HASH_SHA256:
-        //eq_check(size, SHA256_DIGEST_LENGTH);
-        _(assert size == SHA256_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA256_Final(outt, &state->hash_ctx.sha256);
         _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha256)->val)
-        _(ghost state->usable = (&state->hash_ctx.sha256)->usable)
         break;
     case S2N_HASH_SHA384:
-        //eq_check(size, SHA384_DIGEST_LENGTH);
-        _(assert size == SHA384_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA384_Final(outt, &state->hash_ctx.sha384);
         _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha384)->val)
-        _(ghost state->usable = (&state->hash_ctx.sha384)->usable)
         break;
     case S2N_HASH_SHA512:
-        //eq_check(size, SHA512_DIGEST_LENGTH);
-        _(assert size == SHA512_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
         _(unwrap &state->hash_ctx)
         r = SHA512_Final(outt, &state->hash_ctx.sha512);
         _(wrap &state->hash_ctx)
-        _(ghost state->hashState = (&state->hash_ctx.sha512)->val)
-        _(ghost state->usable = (&state->hash_ctx.sha512)->usable)
         break;
     case S2N_HASH_MD5_SHA1:
-        //eq_check(size, MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH);
-        _(assert size == MD5_DIGEST_LENGTH + SHA_DIGEST_LENGTH) //USER ADDED INSTEAD OF EQ_CHECK
-        r = SHA1_Final2(((uint8_t *) outt) + MD5_DIGEST_LENGTH, &state->hash_ctx.md5_sha1.sha1);
-        r &= MD5_Final2(outt, &state->hash_ctx.md5_sha1.md5);
-        _(ghost state->hashState = (&state->hash_ctx.md5_sha1.sha1)->val)
-        _(assert state->hashState == (&state->hash_ctx.md5_sha1.md5)->val)
-        _(ghost state->usable = (&state->hash_ctx.md5_sha1.md5)->usable)
+        r = SHA1_Final(((uint8_t *) outt) + MD5_DIGEST_LENGTH, &state->hash_ctx.md5_sha1.sha1);
+        r &= MD5_Final(outt, &state->hash_ctx.md5_sha1.md5);
         break;
     default:
-        //S2N_ERROR(S2N_ERR_HASH_INusable_ALGORITHM);
         _(assert 0)
     }
 
     if (r == 0) {
-        //S2N_ERROR(S2N_ERR_HASH_DIGEST_FAILED);
         _(assert 0)
     }
+    _(ghost state->valid = 0)
+    _(ghost state->hashState = repeat(0x0, 0))
     _(wrap state)
     return 0;
 }
@@ -221,52 +192,15 @@ int s2n_hash_digest(struct s2n_hash_state *state, void *outt, uint32_t size)
 int s2n_hash_reset(struct s2n_hash_state *state)
 {
     _(ghost hash_state_destroy(state))
-    return s2n_hash_init(state,state->alg);
+    return s2n_hash_init(state, state->alg);
 }
 
 int s2n_hash_copy(struct s2n_hash_state *to, struct s2n_hash_state *from)
 {
-    _(assert \wrapped_with_deep_domain(from))
     _(ghost hash_state_destroy(from))
-    _(assert sizeof(struct s2n_hash_state) ==> to != NULL)
     *to = *from; //USER ADDED IN PLACE OF MEMCPY
     //memcpy_check(to, from, sizeof(struct s2n_hash_state));
-    if(from->alg == S2N_HASH_NONE) {
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx})
-    }
-    else if(from->alg == S2N_HASH_MD5) {
-        _(wrap &to->hash_ctx.md5)
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx.md5, &to->hash_ctx})
-    }
-    else if(from->alg == S2N_HASH_SHA1) {
-        _(wrap &to->hash_ctx.sha1)
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx.sha1, &to->hash_ctx})}
-    else if(from->alg == S2N_HASH_SHA224) {
-        _(wrap &to->hash_ctx.sha224)
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx.sha224, &to->hash_ctx})}
-    else if(from->alg == S2N_HASH_SHA256) {
-        _(wrap &to->hash_ctx.sha256)
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx.sha256, &to->hash_ctx})}
-    else if(from->alg == S2N_HASH_SHA384) {
-        _(wrap &to->hash_ctx.sha384)
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx.sha384, &to->hash_ctx})}
-    else if(from->alg == S2N_HASH_SHA512) { 
-        _(wrap &to->hash_ctx.sha512)
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx.sha512, &to->hash_ctx})}
-    else if(from->alg == S2N_HASH_MD5_SHA1) {
-        _(wrap &to->hash_ctx.md5_sha1.sha1)
-        _(wrap &to->hash_ctx.md5_sha1.md5)
-        _(wrap &to->hash_ctx.md5_sha1)
-        _(wrap &to->hash_ctx)
-        _(ghost to->\owns = {&to->hash_ctx.md5_sha1, &to->hash_ctx.md5_sha1.sha1, &to->hash_ctx.md5_sha1.md5, &to->hash_ctx})}
-    else {_(assert 0)}
-    _(wrap to)
+    _(ghost wrap_hash_state((to)))
+    _(ghost wrap_hash_state((from)))
     return 0;
 }
