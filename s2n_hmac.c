@@ -309,7 +309,8 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(assert \wrapped_with_deep_domain(&state->inner))
     for (int i = 0; i < state->block_size; i++) 
         _(writes \array_range(state->xor_pad, state->block_size))
-        _(invariant \forall int j; j>=0 && j<i ==> state->xor_pad[j]==0x5c){
+        _(invariant \forall int j; j>=0 && j<i ==> state->xor_pad[j]==0x5c)
+    {
         state->xor_pad[i] = 0x5c;
     }
     unchanged_outer_innerjustkey
@@ -347,13 +348,11 @@ static int s2n_sslv3_mac_digest(struct s2n_hmac_state *state, void *outt, uint32
     _(assert (&state->inner)->hashState == 
         concatenate(concatenate(state->key, OPAD),
         hashVal(concatenate((&state->inner_just_key)->hashState, state->message), hmac_to_hash(state->alg))))
-    {
-        unchanged_outer_innerjustkey
-        int res= s2n_hash_digest(&state->inner, outt, size);
-        _(ghost state->valid = 0)
-        _(wrap state)
-        return res;
-    }
+    unchanged_outer_innerjustkey
+    int res= s2n_hash_digest(&state->inner, outt, size);
+    _(ghost state->valid = 0)
+    _(wrap state)
+    return res;
 }
 
 #define unchanged_inners \
@@ -381,12 +380,10 @@ int s2n_hmac_digest(struct s2n_hmac_state *state, void *outt, uint32_t size)
     unchanged_inners
     GUARD(s2n_hash_update(&state->outer, state->digest_pad, state->digest_size));
     _(assert (&state->outer)->hashState == concatenate(make_num(state->xor_pad, state->block_size), make_num(state->digest_pad, state->digest_size)))    
-    { 
-        unchanged_inners
-        int res = s2n_hash_digest(&state->outer, outt, size);
-        _(wrap state)
-        return res; 
-    }
+    unchanged_inners
+    int res = s2n_hash_digest(&state->outer, outt, size);
+    _(wrap state)
+    return res; 
 }
 
 int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *outt, uint32_t size)
@@ -406,18 +403,15 @@ int s2n_hmac_digest_two_compression_rounds(struct s2n_hmac_state *state, void *o
      * even if there is no need for the second.
      */
     _(assert \inv(state))
-    if (state->currently_in_hash_block > (state->hash_block_size - 9))
-    {
+    if (state->currently_in_hash_block > (state->hash_block_size - 9)){
         return 0;
     }
     s2n_hmac_reset(state);
     _(unwrap state)
-    { 
-        int res = s2n_hash_update(&state->inner, state->xor_pad, state->hash_block_size);
-        _(ghost state->valid = 0)
-        _(wrap state)
-        return res; 
-    }
+    int res = s2n_hash_update(&state->inner, state->xor_pad, state->hash_block_size);
+    _(ghost state->valid = 0)
+    _(wrap state)
+    return res; 
 }
 
 int s2n_hmac_reset(struct s2n_hmac_state *state)
@@ -462,7 +456,7 @@ int s2n_hmac_reset(struct s2n_hmac_state *state)
 int s2n_hmac_copy(struct s2n_hmac_state *to, struct s2n_hmac_state *from)
 {
     //memcpy_check(to, from, sizeof(struct s2n_hmac_state));
-    _(assert \wrapped_with_deep_domain(from)) // NECESSARY
+    _(assert \wrapped_with_deep_domain(from)) 
     _(assert is_valid_hmac(from->alg))
     _(ghost hmac_state_destroy(from);)
     *to = *from; //USED ADDED IN PLACE OF MEMCPY
